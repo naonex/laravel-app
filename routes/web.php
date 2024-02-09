@@ -20,6 +20,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/three', function () {
         return view('three.index');
     })->name('three');
+    Route::get('/three/openstreetmap', function () {
+        return view('three.openstreetmap.index');
+    })->name('threeOpenstreetmap');
 });
 
 require __DIR__.'/auth.php';

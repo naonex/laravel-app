@@ -18,6 +18,9 @@
                     <a class="font-medium text-blue-600 dark:text-red-500 hover:underline" href="{{ route('three') }}">
                         {{ route('three') }}
                     </a>
+                    <a class="font-medium text-blue-600 dark:text-red-500 hover:underline" href="{{ route('threeOpenstreetmap') }}">
+                        {{ route('threeOpenstreetmap') }}
+                    </a>
                 </div>
             </div>
         </div>
