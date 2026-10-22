@@ -12,6 +12,14 @@
                     {{ __("You're logged in!") }}
                 </div>
             </div>
+            <div class="mt-2 bg-white overflow-hidden shadow-sm sm:rounded-lg">
+                <div class="p-6 text-gray-900 grid">
+                    {{ __("threeサンプル画面に移動") }}
+                    <a class="font-medium text-blue-600 dark:text-red-500 hover:underline" href="{{ route('three') }}">
+                        {{ route('three') }}
+                    </a>
+                </div>
+            </div>
         </div>
     </div>
 </x-app-layout>

@@ -15,6 +15,11 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+
+    // NOTE: 以下のルーティングを追加
+    Route::get('/three', function () {
+        return view('three.index');
+    })->name('three');
 });
 
 require __DIR__.'/auth.php';
