@@ -23,6 +23,14 @@
                     </a>
                 </div>
             </div>
+            <div class="mt-2 bg-white overflow-hidden shadow-sm sm:rounded-lg">
+                <div class="p-6 text-gray-900 grid">
+                    {{ __("動画圧縮画面に移動") }}
+                    <a class="font-medium text-blue-600 dark:text-red-500 hover:underline" href="{{ route('ffmpeg.transcode') }}">
+                        {{ route('ffmpeg.transcode') }}
+                    </a>
+                </div>
+            </div>
         </div>
     </div>
 </x-app-layout>

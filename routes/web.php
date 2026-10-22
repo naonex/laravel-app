@@ -23,6 +23,15 @@ Route::middleware('auth')->group(function () {
     Route::get('/three/openstreetmap', function () {
         return view('three.openstreetmap.index');
     })->name('threeOpenstreetmap');
+
+    // 動画圧縮画面
+    Route::get('/ffmpeg/transcode', function () {
+        return response()
+            ->view('tool/ffmpeg/transcode')
+            // NOTE: このheaderがないとSharedArrayBufferが使えない
+            ->header("Cross-Origin-Embedder-Policy", "require-corp")
+            ->header("Cross-Origin-Opener-Policy", "same-origin");
+    })->name('ffmpeg.transcode');
 });
 
 require __DIR__.'/auth.php';
