@@ -48,8 +48,9 @@ function onMapClick(e) {
     //Mapから地図imgを取得 NOTE: CORS対策のため、laravelの内部APIで画像を取得して返す形とする
     //let mapImgs = document.querySelectorAll("#map img")
     let mapImg = document.querySelector("#map img")
-    let imageUrl = 'http://localhost/api/image?url=' + mapImg.src.replace('https://', '')
-
+    const apiUrl = `${window.location.origin}/api/image`;
+    let imageUrl = apiUrl + '?url=' + mapImg.src.replace('https://', '')
+    
     const width = 500;
     const height = 500;
 
