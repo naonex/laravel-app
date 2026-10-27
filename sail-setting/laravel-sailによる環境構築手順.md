@@ -72,6 +72,9 @@ my-wikiの参考リンク：https://github.com/naonex/my-wiki/blob/master/00_Not
    ./vendor/bin/sail npm run dev
    ```
 
+5. `localhost:8080(.envのAPP_PORT)` にアクセスし、laravelデフォのwelcomeページに行けたらOK。  
+   右上のログインから確認してね！アカウントはローカルDB管理なので適当に作成してもらってOKです！
+
 NOTE: 何回か手順にミスがあると、mysqlが立ち上がらなくなるケースあり。ボリューム削除してやり直すとうまくいきました。  
 参考URL：https://yuuu-daily.com/docker_error/
 

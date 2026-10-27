@@ -26,6 +26,11 @@
                         </div>
                         @if (Route::has('login'))
                             <nav class="-mx-3 flex flex-1 justify-end">
+                                {{-- [ADD][START] --}}
+                                <span class="px-3 py-2 text-sm font-semibold text-[#FF2D20]">
+                                    こちらからログイン →
+                                </span>
+                                {{-- [ADD][END] --}}
                                 @auth
                                     <a
                                         href="{{ url('/dashboard') }}"
