@@ -14,20 +14,18 @@
             </div>
             <div class="mt-2 bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6 text-gray-900 grid">
-                    {{ __("threeサンプル画面に移動") }}
                     <a class="font-medium text-blue-600 dark:text-red-500 hover:underline" href="{{ route('three') }}">
-                        {{ route('three') }}
+                        {{ __('screens.three') }}
                     </a>
                     <a class="font-medium text-blue-600 dark:text-red-500 hover:underline" href="{{ route('threeOpenstreetmap') }}">
-                        {{ route('threeOpenstreetmap') }}
+                        {{ __('screens.threeOpenstreetmap') }}
                     </a>
                 </div>
             </div>
             <div class="mt-2 bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6 text-gray-900 grid">
-                    {{ __("動画圧縮画面に移動") }}
                     <a class="font-medium text-blue-600 dark:text-red-500 hover:underline" href="{{ route('ffmpeg.transcode') }}">
-                        {{ route('ffmpeg.transcode') }}
+                        {{ __('screens.ffmpeg.transcode') }}
                     </a>
                 </div>
             </div>
