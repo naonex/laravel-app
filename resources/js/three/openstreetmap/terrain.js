@@ -69,6 +69,19 @@ let terrainMetersPerPixel = null;
 
 
 // ----------------------------------------
+// ルートアニメーションの管理
+// ----------------------------------------
+
+let routeAnimationMarker = null;
+let routeAnimationPoints = [];
+let routeAnimationProgress = 0;
+let isRouteAnimating = false;
+
+let animationFrameId = null;
+let previousAnimationTime = 0;
+
+
+// ----------------------------------------
 // Three.js 初期化
 // ----------------------------------------
 
@@ -819,6 +832,35 @@ export function updateTerrainRoute(leafletMap, startPoint, goalPoint) {
         return;
     }
 
+
+    // アニメーション用にルート座標を保持
+    routeAnimationPoints = routePoints;
+
+    // アニメーションを初期化
+    routeAnimationProgress = 0;
+    isRouteAnimating = true;
+
+    // 移動マーカーを生成
+    if (!routeAnimationMarker) {
+
+        const geometry = new THREE.SphereGeometry(5, 16, 16);
+
+        const material = new THREE.MeshBasicMaterial({
+            color: 0x00ffff
+        });
+
+        routeAnimationMarker = new THREE.Mesh(
+            geometry,
+            material
+        );
+
+        scene.add(routeAnimationMarker);
+    }
+
+    // マーカーを出発地点に配置
+    routeAnimationMarker.position.copy(routeAnimationPoints[0]);
+    
+
     // ルートのジオメトリを生成
     const geometry = new THREE.BufferGeometry().setFromPoints(
         routePoints
@@ -833,4 +875,108 @@ export function updateTerrainRoute(leafletMap, startPoint, goalPoint) {
     terrainRouteLine = new THREE.Line(geometry, material);
 
     scene.add(terrainRouteLine);
+}
+
+
+// ----------------------------------------
+// ルートアニメーション
+// ----------------------------------------
+
+export function animateTerrainRoute(deltaTime) {
+
+    if (
+        !isRouteAnimating ||
+        routeAnimationPoints.length < 2 ||
+        !routeAnimationMarker
+    ) {
+        return;
+    }
+
+    // 移動時間（秒）
+    const duration = 5;
+
+    // 経過時間に応じて進行度を更新
+    routeAnimationProgress += deltaTime / duration;
+
+    // 目的地に到着
+    if (routeAnimationProgress >= 1) {
+        routeAnimationProgress = 1;
+        isRouteAnimating = false;
+    }
+
+    // ルート上の現在位置を計算
+    const position =
+        routeAnimationProgress * (routeAnimationPoints.length - 1);
+
+    const index = Math.floor(position);
+
+    const rate = position - index;
+
+    const start = routeAnimationPoints[index];
+
+    const end = routeAnimationPoints[
+        Math.min(index + 1, routeAnimationPoints.length - 1)
+    ];
+
+    // 2地点間を補間してマーカーを移動
+    routeAnimationMarker.position.lerpVectors(
+        start,
+        end,
+        rate
+    );
+}
+
+
+// ----------------------------------------
+// Three.jsアニメーションループ
+// ----------------------------------------
+
+function animateTerrain() {
+
+    // 次のフレームを予約
+    animationFrameId = requestAnimationFrame(animateTerrain);
+
+    // 現在時刻を取得
+    const currentTime = performance.now();
+
+    // 前回からの経過時間（秒）
+    const deltaTime = previousAnimationTime === 0
+        ? 0
+        : (currentTime - previousAnimationTime) / 1000;
+
+    previousAnimationTime = currentTime;
+
+    // ルートアニメーション
+    animateTerrainRoute(deltaTime);
+
+    // Three.jsを描画
+    renderer.render(scene, camera);
+}
+
+
+// ----------------------------------------
+// ルートアニメーション開始
+// ----------------------------------------
+
+export function startTerrainRouteAnimation() {
+
+    // ルートが存在しなければ何もしない
+    if (routeAnimationPoints.length < 2) {
+        return;
+    }
+
+    // アニメーションを初期化
+    routeAnimationProgress = 0;
+    isRouteAnimating = true;
+
+    // マーカーを出発地点に配置
+    routeAnimationMarker.position.copy(
+        routeAnimationPoints[0]
+    );
+
+    // アニメーションループを開始
+    if (animationFrameId === null) {
+        previousAnimationTime = 0;
+        animateTerrain();
+    }
 }

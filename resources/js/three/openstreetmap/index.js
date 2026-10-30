@@ -1,4 +1,4 @@
-import { createTerrain, initTerrain, updateTerrainRoute } from './terrain.js';
+import { createTerrain, initTerrain, updateTerrainRoute, startTerrainRouteAnimation } from './terrain.js';
 
 // 福岡市を初期表示位置に設定
 const defaultPosition = [33.5902, 130.4017];
@@ -172,6 +172,18 @@ function updateRoute() {
         }
     ).addTo(leafletMap);
 }
+
+
+// ----------------------------------------
+// ルート再生ボタン
+// ----------------------------------------
+
+document.getElementById('startRouteAnimation')
+    .addEventListener('click', () => {
+
+        startTerrainRouteAnimation();
+
+    });
 
 
 // // マーカー、円、多角形をセット

@@ -35,6 +35,10 @@
           <div id="terrainStatus" class="mt-2 text-gray-500">
               地図をクリックすると地形を表示します。
           </div>
+
+          <button id="startRouteAnimation">
+            ルート再生
+        </button>
       </div>
   </div>
 </x-app-layout>
