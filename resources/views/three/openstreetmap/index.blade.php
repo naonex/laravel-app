@@ -11,7 +11,6 @@
 
     <!-- jsを読み込む ※Mapより後で実行（内部でMapを使えるようにするため） -->
     @vite('resources/js/three/openstreetmap/index.js')
-    @vite('resources/js/three/openstreetmap/terrain.js')
   </x-slot>
 
   <x-slot name="header">

@@ -9,7 +9,6 @@ export default defineConfig({
                 'resources/js/app.js',
                 'resources/js/three/index.js',
                 'resources/js/three/openstreetmap/index.js',
-                'resources/js/three/openstreetmap/terrain.js',
             ],
             refresh: true,
         }),
