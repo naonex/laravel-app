@@ -9,8 +9,9 @@
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""></script>
 
-    <!-- index.jsを読み込む ※Mapより後で実行（内部でMapを使えるようにするため） -->
+    <!-- jsを読み込む ※Mapより後で実行（内部でMapを使えるようにするため） -->
     @vite('resources/js/three/openstreetmap/index.js')
+    @vite('resources/js/three/openstreetmap/terrain.js')
   </x-slot>
 
   <x-slot name="header">
@@ -19,10 +20,21 @@
     </h2>
   </x-slot>
 
-  <div class="flex flex-row justify-center">
-    <div id="map" style="border:1px solid #777777; width:500px; height:500px;"></div>
-    <div id="container">
-      <canvas id="myCanvas"></canvas>
-    </div>
+  <div class="flex flex-row justify-center w-full max-w-[1024px] mx-auto gap-2">
+      <!-- Leaflet -->
+      <div id="map"
+          class="flex-1 min-w-0 h-[500px] border border-gray-500">
+      </div>
+
+      <!-- Three.js -->
+      <div class="flex-1 min-w-0">
+          <div id="terrain3d"
+              class="w-full h-[500px] bg-slate-800">
+          </div>
+
+          <div id="terrainStatus" class="mt-2 text-gray-500">
+              地図をクリックすると地形を表示します。
+          </div>
+      </div>
   </div>
 </x-app-layout>
