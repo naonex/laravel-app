@@ -56,6 +56,19 @@ let terrainMarker = null;
 let terrainArea = null;
 
 // ----------------------------------------
+// 3Dルート管理
+// ----------------------------------------
+
+let terrainRouteLine = null;
+
+// 現在表示している地形の中心座標
+let terrainCenter = null;
+
+// 現在表示している地形の1ピクセルあたりの実距離
+let terrainMetersPerPixel = null;
+
+
+// ----------------------------------------
 // Three.js 初期化
 // ----------------------------------------
 
@@ -282,6 +295,16 @@ export async function createTerrain(leafletMap, latitude, longitude) {
             Math.cos(latitude * Math.PI / 180) /
             (256 * Math.pow(2, DEM_ZOOM));
 
+
+        // 現在表示している地形の情報を保持
+        terrainCenter = {
+            latitude: latitude,
+            longitude: longitude
+        };
+
+        terrainMetersPerPixel = metersPerPixel;
+
+
         // 3D地形の頂点データ
         const elevations = [];
 
@@ -345,8 +368,16 @@ export async function createTerrain(leafletMap, latitude, longitude) {
             }
         }
 
+        // 標高データが1件も取得できなかった場合
         if (!Number.isFinite(minElevation)) {
-            throw new Error('標高データが取得できませんでした。');
+            status.textContent =
+                '標高データが取得できませんでした。';
+            // 仮の標高を設定
+            minElevation = 0;
+            maxElevation = 0;
+        } else {
+            status.textContent =
+                `標高範囲：${minElevation.toFixed(1)}m ～ ${maxElevation.toFixed(1)}m`;
         }
 
         // ----------------------------------------
@@ -412,7 +443,7 @@ export async function createTerrain(leafletMap, latitude, longitude) {
 
             colors.push(color.r, color.g, color.b);
         }
-        
+
 
         geometry.setAttribute(
             'color',
@@ -567,10 +598,6 @@ export async function createTerrain(leafletMap, latitude, longitude) {
         );
 
         controls.update();
-
-        status.textContent =
-            `標高範囲：${minElevation.toFixed(1)}m ～ ${maxElevation.toFixed(1)}m`;
-
         
         // ----------------------------------------
         // 地形表示範囲を地図上に表示
@@ -656,4 +683,154 @@ function createDirectionLabel(text) {
     sprite.scale.set(40, 40, 1);
 
     return sprite;
+}
+
+
+// ----------------------------------------
+// 3D地形上のルート描画
+// ----------------------------------------
+
+export function updateTerrainRoute(leafletMap, startPoint, goalPoint) {
+
+    // 必要なデータが揃っていなければ何もしない
+    if (
+        !terrainMesh ||
+        !terrainCenter ||
+        !terrainMetersPerPixel ||
+        !startPoint ||
+        !goalPoint
+    ) {
+        return;
+    }
+
+    // 既存のルートを削除
+    if (terrainRouteLine) {
+        scene.remove(terrainRouteLine);
+        terrainRouteLine.geometry.dispose();
+        terrainRouteLine.material.dispose();
+        terrainRouteLine = null;
+    }
+
+    // 地形中心のピクセル座標
+    const centerPixel = leafletMap.project(
+        L.latLng(
+            terrainCenter.latitude,
+            terrainCenter.longitude
+        ),
+        DEM_ZOOM
+    );
+
+    // 出発地点・目的地点のピクセル座標
+    const startPixel = leafletMap.project(
+        L.latLng(startPoint.latitude, startPoint.longitude),
+        DEM_ZOOM
+    );
+
+    const goalPixel = leafletMap.project(
+        L.latLng(goalPoint.latitude, goalPoint.longitude),
+        DEM_ZOOM
+    );
+
+    // 地図のピクセル座標をThree.jsのローカル座標に変換
+    const startX =
+        (startPixel.x - centerPixel.x) * terrainMetersPerPixel;
+
+    const startY =
+        -(startPixel.y - centerPixel.y) * terrainMetersPerPixel;
+
+    const goalX =
+        (goalPixel.x - centerPixel.x) * terrainMetersPerPixel;
+
+    const goalY =
+        -(goalPixel.y - centerPixel.y) * terrainMetersPerPixel;
+
+    // // 地形の範囲内にあるか確認
+    // const halfSize = TERRAIN_SIZE / 2;
+
+    // if (
+    //     Math.abs(startX) > halfSize ||
+    //     Math.abs(startY) > halfSize ||
+    //     Math.abs(goalX) > halfSize ||
+    //     Math.abs(goalY) > halfSize
+    // ) {
+    //     console.warn('ルートの一部が3D地形の範囲外です。');
+    //     return;
+    // }
+
+    // 地形との交差判定に使用するRaycaster
+    const raycaster = new THREE.Raycaster();
+
+    // 地形の高さの最大値を取得
+    terrainMesh.geometry.computeBoundingBox();
+
+    const maxHeight = terrainMesh.geometry.boundingBox.max.z;
+
+    // ルート上の座標を格納
+    const routePoints = [];
+
+    // ルートの距離に応じて分割数を決定
+    const routeDistance = Math.sqrt(
+        Math.pow(goalX - startX, 2) +
+        Math.pow(goalY - startY, 2)
+    );
+
+    // 約10m間隔で分割（最低100区間）
+    const segments = Math.max(
+        100,
+        Math.ceil(routeDistance / 10)
+    );
+
+    terrainMesh.updateMatrixWorld(true);
+
+    for (let i = 0; i <= segments; i++) {
+
+        const rate = i / segments;
+
+        // ルート上のXY座標を計算
+        const x = startX + (goalX - startX) * rate;
+        const y = startY + (goalY - startY) * rate;
+
+        // 地形の上方から真下に向けてRayを飛ばす
+        raycaster.set(
+            new THREE.Vector3(x, y, maxHeight + 1000),
+            new THREE.Vector3(0, 0, -1)
+        );
+
+        const intersections = raycaster.intersectObject(
+            terrainMesh,
+            false
+        );
+
+        // 地形との交差位置を取得
+        if (intersections.length > 0) {
+
+            const point = intersections[0].point.clone();
+
+            // 地形との重なりを防ぐため少し浮かせる
+            point.z += 1;
+
+            routePoints.push(point);
+        }
+    }
+
+    // 地形と交差する地点がなければ終了
+    if (routePoints.length < 2) {
+        console.warn('3Dルートを描画できませんでした。');
+        return;
+    }
+
+    // ルートのジオメトリを生成
+    const geometry = new THREE.BufferGeometry().setFromPoints(
+        routePoints
+    );
+
+    // ルートのマテリアルを生成
+    const material = new THREE.LineBasicMaterial({
+        color: 0xff0000
+    });
+
+    // ルートのメッシュを生成
+    terrainRouteLine = new THREE.Line(geometry, material);
+
+    scene.add(terrainRouteLine);
 }
