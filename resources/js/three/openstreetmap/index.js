@@ -178,11 +178,30 @@ function updateRoute() {
 // ルート再生ボタン
 // ----------------------------------------
 
-document.getElementById('startRouteAnimation')
+document.getElementById('terrainAnimationPlay')
     .addEventListener('click', () => {
 
-        startTerrainRouteAnimation();
+        startTerrainRouteAnimation(
+            leafletMap,
+            startPoint,
+            goalPoint,
+            currentLocationMarker
+        );
 
+    });
+
+
+// 移動設定の切り替え
+document.getElementById('terrainAnimationMode')
+    .addEventListener('change', (event) => {
+
+        const isSpeedMode = event.target.value === 'speed';
+
+        document.getElementById('terrainAnimationSpeedArea')
+            .classList.toggle('hidden', !isSpeedMode);
+
+        document.getElementById('terrainAnimationDurationArea')
+            .classList.toggle('hidden', isSpeedMode);
     });
 
 

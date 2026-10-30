@@ -30,6 +30,9 @@ const DEM_SOURCES = [
     'dem_png'
 ];
 
+// 移動速度（メートル／秒）
+const TERRAIN_ANIMATION_MIN_SPEED = 1000;
+
 // ----------------------------------------
 // Three.js 初期化用変数
 // ----------------------------------------
@@ -79,6 +82,42 @@ let isRouteAnimating = false;
 
 let animationFrameId = null;
 let previousAnimationTime = 0;
+
+
+// 地形移動アニメーション用
+let terrainAnimationPath = [];
+let terrainAnimationDistance = 0;
+let terrainAnimationElapsed = 0;
+let terrainAnimationDuration = 20;
+
+// DEM更新間隔（メートル）
+const TERRAIN_UPDATE_INTERVAL = 200;
+
+// DEM取得中フラグ
+let isTerrainUpdating = false;
+
+// アニメーション中のOrbitControls状態
+let previousControlsEnabled = true;
+
+// 最後に地形を更新した距離
+let terrainAnimationLastUpdateDistance = 0;
+
+// アニメーションで使用するLeaflet地図
+let animationLeafletMap = null;
+
+
+// Leafletの現在地点マーカー
+let currentLocationMarker = null;
+
+// アニメーション中の現在地点マーカー
+let terrainAnimationMapMarker = null;
+
+
+// 方角ラベル
+let terrainDirectionLabels = null;
+
+// 地形取得リクエストの管理
+let terrainRequestId = 0;
 
 
 // ----------------------------------------
@@ -239,9 +278,31 @@ function decodeElevation(r, g, b, a) {
 // 3D地形生成
 // ----------------------------------------
 
-export async function createTerrain(leafletMap, latitude, longitude) {
+export async function createTerrain(
+    leafletMap,
+    latitude,
+    longitude,
+    options = {}
+) {
     console.log('createTerrain実行');
-    status.textContent = '標高データを取得しています...';
+
+    // オプション
+    const {
+        preserveCamera = false,
+        showMarker = true,
+        updateArea = true,
+        showStatus = true
+    } = options;
+
+    // 地形取得リクエストを識別
+    const requestId = ++terrainRequestId;
+
+    // カメラの現在位置と注視点の相対位置を保持
+    const cameraOffset = camera.position.clone().sub(controls.target);
+
+    if (showStatus) {
+        status.textContent = '標高データを取得しています...';
+    }
 
     try {
 
@@ -291,6 +352,12 @@ export async function createTerrain(leafletMap, latitude, longitude) {
         }
 
         await Promise.all(tilePromises);
+
+        // 古いリクエストの場合は処理を終了
+        if (requestId !== terrainRequestId) {
+            return false;
+        }
+
 
         // 標高タイルを画素データとして取得
         const imageData = ctx.getImageData(
@@ -383,12 +450,14 @@ export async function createTerrain(leafletMap, latitude, longitude) {
 
         // 標高データが1件も取得できなかった場合
         if (!Number.isFinite(minElevation)) {
-            status.textContent =
-                '標高データが取得できませんでした。';
+            if (showStatus) {
+                status.textContent =
+                    '標高データが取得できませんでした。';
+            }
             // 仮の標高を設定
             minElevation = 0;
             maxElevation = 0;
-        } else {
+        } else if (showStatus) {
             status.textContent =
                 `標高範囲：${minElevation.toFixed(1)}m ～ ${maxElevation.toFixed(1)}m`;
         }
@@ -492,6 +561,20 @@ export async function createTerrain(leafletMap, latitude, longitude) {
         // 方角ラベル配置
         // ----------------------------------------
 
+        // 以前の方角ラベルを削除
+        if (terrainDirectionLabels) {
+            scene.remove(terrainDirectionLabels);
+
+            terrainDirectionLabels.traverse((child) => {
+                if (child.isSprite) {
+                    child.material.map.dispose();
+                    child.material.dispose();
+                }
+            });
+
+            terrainDirectionLabels = null;
+        }
+
         // 地形の半分のサイズ
         const halfSize = TERRAIN_SIZE / 2;
 
@@ -502,6 +585,9 @@ export async function createTerrain(leafletMap, latitude, longitude) {
             { text: 'E', x: halfSize + 40, y: 0 },
             { text: 'W', x: -halfSize - 40, y: 0 }
         ];
+
+        // ラベルをまとめるグループ
+        terrainDirectionLabels = new THREE.Group();
 
         // ラベルを配置
         directions.forEach((direction) => {
@@ -514,88 +600,100 @@ export async function createTerrain(leafletMap, latitude, longitude) {
                 0
             );
 
-            scene.add(label);
+            terrainDirectionLabels.add(label);
         });
+
+        scene.add(terrainDirectionLabels);
 
 
         // ----------------------------------------
         // クリック地点のマーカー生成
         // ----------------------------------------
 
-        // 以前のマーカーを削除
-        if (terrainMarker) {
-            scene.remove(terrainMarker);
+        if (showMarker) {
 
-            terrainMarker.traverse((child) => {
-                if (child.isMesh) {
-                    child.geometry.dispose();
-                    child.material.dispose();
-                }
+            // 以前のマーカーを削除
+            if (terrainMarker) {
+                scene.remove(terrainMarker);
+
+                terrainMarker.traverse((child) => {
+                    if (child.isMesh) {
+                        child.geometry.dispose();
+                        child.material.dispose();
+                    }
+                });
+
+                terrainMarker = null;
+            }
+
+            // ピンの設定
+            const pinHeight = 60;
+            const pinRadius = 10;
+
+            // ピン全体をまとめるグループ
+            terrainMarker = new THREE.Group();
+
+            // ピンの先端（円錐）
+            const pinTipGeometry = new THREE.ConeGeometry(
+                pinRadius,
+                pinHeight / 2,
+                16
+            );
+
+            const pinMaterial = new THREE.MeshBasicMaterial({
+                color: 0xff0000
             });
+
+            const pinTip = new THREE.Mesh(
+                pinTipGeometry,
+                pinMaterial
+            );
+
+            // 円錐の先端をZ軸のマイナス方向（下向き）にする
+            pinTip.rotation.x = -Math.PI / 2;
+
+            // 円錐の位置
+            pinTip.position.z = pinHeight / 4;
+
+            // ピンの頭（球体）
+            const pinHeadGeometry = new THREE.SphereGeometry(
+                pinRadius,
+                16,
+                16
+            );
+
+            const pinHead = new THREE.Mesh(
+                pinHeadGeometry,
+                pinMaterial
+            );
+
+            // 球体を少し下げて円錐と重ねる
+            pinHead.position.z = pinHeight / 2 - pinRadius * 0.01;
+
+            // グループに追加
+            terrainMarker.add(pinTip);
+            terrainMarker.add(pinHead);
+
+            // 地形の中心に配置
+            const centerIndex =
+                Math.floor(TERRAIN_SEGMENTS / 2) * (TERRAIN_SEGMENTS + 1) +
+                Math.floor(TERRAIN_SEGMENTS / 2);
+
+            const centerElevation = elevations[centerIndex] ?? minElevation;
+
+            terrainMarker.position.set(
+                0,
+                0,
+                (centerElevation - minElevation) * HEIGHT_SCALE
+            );
+
+            scene.add(terrainMarker);
+
+        } else if (terrainMarker) {
+
+            // アニメーション中はマーカーを非表示
+            terrainMarker.visible = false;
         }
-
-        // ピンの設定
-        const pinHeight = 60;
-        const pinRadius = 10;
-
-        // ピン全体をまとめるグループ
-        terrainMarker = new THREE.Group();
-
-        // ピンの先端（円錐）
-        const pinTipGeometry = new THREE.ConeGeometry(
-            pinRadius,
-            pinHeight / 2,
-            16
-        );
-
-        const pinMaterial = new THREE.MeshBasicMaterial({
-            color: 0xff0000
-        });
-
-        const pinTip = new THREE.Mesh(
-            pinTipGeometry,
-            pinMaterial
-        );
-
-        // 円錐の先端をZ軸のマイナス方向（下向き）にする
-        pinTip.rotation.x = -Math.PI / 2;
-
-        // 円錐の位置
-        pinTip.position.z = pinHeight / 4;
-
-        // ピンの頭（球体）
-        const pinHeadGeometry = new THREE.SphereGeometry(
-            pinRadius,
-            16,
-            16
-        );
-
-        const pinHead = new THREE.Mesh(
-            pinHeadGeometry,
-            pinMaterial
-        );
-
-        // 球体を少し下げて円錐と重ねる
-        pinHead.position.z = pinHeight / 2 - pinRadius * 0.01;
-
-        // グループに追加
-        terrainMarker.add(pinTip);
-        terrainMarker.add(pinHead);
-
-        // 地形の中心に配置
-        const centerIndex =
-            Math.floor(TERRAIN_SEGMENTS / 2) * (TERRAIN_SEGMENTS + 1) +
-            Math.floor(TERRAIN_SEGMENTS / 2);
-
-        const centerElevation = elevations[centerIndex] ?? minElevation;
-
-        terrainMarker.position.set(
-            0,
-            0,
-            (centerElevation - minElevation) * HEIGHT_SCALE
-        );
-
-        scene.add(terrainMarker);
 
 
         // カメラと操作対象をリセット
@@ -604,59 +702,81 @@ export async function createTerrain(leafletMap, latitude, longitude) {
 
         controls.target.set(0, 0, centerHeight);
 
-        camera.position.set(
-            1000,
-            -1200,
-            centerHeight + 1000
-        );
+        if (preserveCamera) {
+
+            // カメラの角度と距離を維持
+            camera.position.copy(
+                controls.target.clone().add(cameraOffset)
+            );
+
+        } else {
+
+            camera.position.set(
+                1000,
+                -1200,
+                centerHeight + 1000
+            );
+        }
 
         controls.update();
+
         
         // ----------------------------------------
         // 地形表示範囲を地図上に表示
         // ----------------------------------------
 
-        // 地形の半分のサイズ（メートル）
-        // const halfSize = TERRAIN_SIZE / 2;
+        if (updateArea) {
 
-        // 中心地点から南北・東西に広げた範囲
-        const southWest = leafletMap.unproject(
-            L.point(
-                center.x - halfSize / metersPerPixel,
-                center.y + halfSize / metersPerPixel
-            ),
-            DEM_ZOOM
-        );
+            // 地形の半分のサイズ（メートル）
+            // const halfSize = TERRAIN_SIZE / 2;
 
-        const northEast = leafletMap.unproject(
-            L.point(
-                center.x + halfSize / metersPerPixel,
-                center.y - halfSize / metersPerPixel
-            ),
-            DEM_ZOOM
-        );
+            // 中心地点から南北・東西に広げた範囲
+            const southWest = leafletMap.unproject(
+                L.point(
+                    center.x - halfSize / metersPerPixel,
+                    center.y + halfSize / metersPerPixel
+                ),
+                DEM_ZOOM
+            );
 
-        // 表示範囲
-        const bounds = L.latLngBounds(southWest, northEast);
+            const northEast = leafletMap.unproject(
+                L.point(
+                    center.x + halfSize / metersPerPixel,
+                    center.y - halfSize / metersPerPixel
+                ),
+                DEM_ZOOM
+            );
 
-        // 以前の矩形を削除
-        if (terrainArea) {
-            leafletMap.removeLayer(terrainArea);
+            // 表示範囲
+            const bounds = L.latLngBounds(southWest, northEast);
+
+            // 以前の矩形を削除
+            if (terrainArea) {
+                leafletMap.removeLayer(terrainArea);
+            }
+
+            // 矩形を追加
+            terrainArea = L.rectangle(bounds, {
+                color: '#ff7800',
+                weight: 2,
+                fill: false
+            }).addTo(leafletMap);
         }
 
-        // 矩形を追加
-        terrainArea = L.rectangle(bounds, {
-            color: '#ff7800',
-            weight: 2,
-            fill: false
-        }).addTo(leafletMap);
+
+        return true;
+
 
     } catch (error) {
 
         console.error('地形生成エラー:', error);
 
-        status.textContent =
-            '地形を取得できませんでした。別の地点を試してください。';
+        if (showStatus) {
+            status.textContent =
+                '地形を取得できませんでした。別の地点を試してください。';
+        }
+
+        return false;
     }
 }
 
@@ -836,29 +956,31 @@ export function updateTerrainRoute(leafletMap, startPoint, goalPoint) {
     // アニメーション用にルート座標を保持
     routeAnimationPoints = routePoints;
 
-    // アニメーションを初期化
-    routeAnimationProgress = 0;
-    isRouteAnimating = true;
 
-    // 移動マーカーを生成
-    if (!routeAnimationMarker) {
+    /* 自動アニメは廃止 */
+    // // アニメーションを初期化
+    // routeAnimationProgress = 0;
+    // isRouteAnimating = true;
 
-        const geometry = new THREE.SphereGeometry(5, 16, 16);
+    // // 移動マーカーを生成
+    // if (!routeAnimationMarker) {
 
-        const material = new THREE.MeshBasicMaterial({
-            color: 0x00ffff
-        });
+    //     const geometry = new THREE.SphereGeometry(5, 16, 16);
 
-        routeAnimationMarker = new THREE.Mesh(
-            geometry,
-            material
-        );
+    //     const material = new THREE.MeshBasicMaterial({
+    //         color: 0x00ffff
+    //     });
 
-        scene.add(routeAnimationMarker);
-    }
+    //     routeAnimationMarker = new THREE.Mesh(
+    //         geometry,
+    //         material
+    //     );
 
-    // マーカーを出発地点に配置
-    routeAnimationMarker.position.copy(routeAnimationPoints[0]);
+    //     scene.add(routeAnimationMarker);
+    // }
+
+    // // マーカーを出発地点に配置
+    // routeAnimationMarker.position.copy(routeAnimationPoints[0]);
     
 
     // ルートのジオメトリを生成
@@ -933,6 +1055,12 @@ export function animateTerrainRoute(deltaTime) {
 
 function animateTerrain() {
 
+    // アニメーションが終了していればループを終了
+    if (!isRouteAnimating) {
+        animationFrameId = null;
+        return;
+    }
+
     // 次のフレームを予約
     animationFrameId = requestAnimationFrame(animateTerrain);
 
@@ -946,11 +1074,94 @@ function animateTerrain() {
 
     previousAnimationTime = currentTime;
 
-    // ルートアニメーション
-    animateTerrainRoute(deltaTime);
+    // 経過時間に応じて進行度を更新
+    terrainAnimationElapsed += deltaTime;
 
-    // Three.jsを描画
-    renderer.render(scene, camera);
+    const progress = Math.min(
+        terrainAnimationElapsed / terrainAnimationDuration,
+        1
+    );
+
+    // ルート上の現在位置を計算
+    const currentPosition = getRoutePosition(
+        terrainAnimationPath[0],
+        terrainAnimationPath[1],
+        progress
+    );
+
+    // 現在の移動距離
+    const currentDistance =
+        terrainAnimationDistance * progress;
+
+    // 一定距離ごとに地形を更新
+    if (
+        !isTerrainUpdating &&
+        (
+            currentDistance - terrainAnimationLastUpdateDistance >= TERRAIN_UPDATE_INTERVAL ||
+            progress >= 1
+        )
+    ) {
+
+        // DEM取得中フラグ
+        isTerrainUpdating = true;
+
+        // 地形を更新
+        createTerrain(
+            animationLeafletMap,
+            currentPosition.latitude,
+            currentPosition.longitude,
+            {
+                preserveCamera: true,
+                showMarker: true,
+                updateArea: false,
+                showStatus: false
+            }
+        ).then((success) => {
+
+            if (success) {
+
+                // 地形上のルートを再描画
+                updateTerrainRoute(
+                    animationLeafletMap,
+                    terrainAnimationPath[0],
+                    terrainAnimationPath[1]
+                );
+
+                // 地図上の現在地点マーカーを更新
+                updateTerrainAnimationMapMarker(
+                    animationLeafletMap,
+                    currentPosition
+                );
+
+                // 最後に更新した距離を保持
+                terrainAnimationLastUpdateDistance = currentDistance;
+
+            } else {
+                console.warn('移動中の地形更新に失敗しました。');
+            }
+
+            // DEM取得終了
+            isTerrainUpdating = false;
+
+            // 目的地まで到着し、最後の地形更新も完了した
+            if (
+                terrainAnimationElapsed >= terrainAnimationDuration &&
+                terrainAnimationLastUpdateDistance >= terrainAnimationDistance
+            ) {
+
+                // アニメーション終了
+                isRouteAnimating = false;
+
+                // // OrbitControlsを元に戻す
+                // controls.enabled = previousControlsEnabled;
+
+                // アニメーション終了
+                stopTerrainRouteAnimation();
+
+                console.log('地形移動アニメーション終了');
+            }
+        });
+    }
 }
 
 
@@ -958,25 +1169,256 @@ function animateTerrain() {
 // ルートアニメーション開始
 // ----------------------------------------
 
-export function startTerrainRouteAnimation() {
+export function startTerrainRouteAnimation(
+    leafletMap,
+    startPoint,
+    goalPoint,
+    locationMarker
+) {
 
-    // ルートが存在しなければ何もしない
-    if (routeAnimationPoints.length < 2) {
+    // 現在地点マーカーを保持
+    currentLocationMarker = locationMarker;
+
+    // 現在地点マーカーを非表示
+    if (currentLocationMarker) {
+        currentLocationMarker.setOpacity(0);
+    }
+
+    // 以下は既存の開始処理...
+
+    // 必要なデータが揃っていなければ何もしない
+    if (!leafletMap || !startPoint || !goalPoint) {
+        console.warn('出発地点または目的地が設定されていません。');
         return;
     }
 
+    // アニメーション中なら何もしない
+    if (isRouteAnimating) {
+        return;
+    }
+
+    // 出発地点と目的地を保持
+    terrainAnimationPath = [
+        {
+            latitude: startPoint.latitude,
+            longitude: startPoint.longitude
+        },
+        {
+            latitude: goalPoint.latitude,
+            longitude: goalPoint.longitude
+        }
+    ];
+
+
+    // 2地点間の距離を計算
+    terrainAnimationDistance = getRouteDistance(startPoint, goalPoint);
+
+    // 移動設定を取得
+    const animationMode = document.getElementById('terrainAnimationMode').value;
+
+    // 移動時間を計算
+    if (animationMode === 'speed') {
+
+        // 指定速度から移動時間を計算
+        const speed = Number(
+            document.getElementById('terrainAnimationSpeed').value
+        );
+
+        terrainAnimationDuration = terrainAnimationDistance / speed;
+
+    } else {
+
+        // 指定時間をそのまま使用
+        terrainAnimationDuration = Number(
+            document.getElementById('terrainAnimationDurationInput').value
+        );
+    }
+
+
+    // Leaflet地図を保持
+    animationLeafletMap = leafletMap;
+
     // アニメーションを初期化
-    routeAnimationProgress = 0;
+    terrainAnimationElapsed = 0;
+
+    // 最初のフレームで出発地点の地形を取得する
+    terrainAnimationLastUpdateDistance = -TERRAIN_UPDATE_INTERVAL;
+
+    // DEM取得状態を初期化
+    isTerrainUpdating = false;
+
+    // // OrbitControlsの状態を保持
+    // previousControlsEnabled = controls.enabled;
+
+    // // アニメーション中はマウス操作を無効化
+    // controls.enabled = false;
+
+    // アニメーション開始
     isRouteAnimating = true;
 
-    // マーカーを出発地点に配置
-    routeAnimationMarker.position.copy(
-        routeAnimationPoints[0]
+    // 地図クリックを無効化
+    setMapClickEnabled(leafletMap, false);
+
+    // 出発地点にマーカーを表示
+    updateTerrainAnimationMapMarker(
+        leafletMap,
+        startPoint
     );
+
+    // ボタン状態を変更
+    document.getElementById('terrainAnimationPlay').disabled = true;
+    document.getElementById('terrainAnimationStop').disabled = false;
 
     // アニメーションループを開始
     if (animationFrameId === null) {
         previousAnimationTime = 0;
         animateTerrain();
+    }
+}
+
+
+// ----------------------------------------
+// ルート上の距離計算
+// ----------------------------------------
+
+function getRouteDistance(startPoint, goalPoint) {
+
+    // 地球の半径（メートル）
+    const earthRadius = 6371000;
+
+    // 緯度・経度をラジアンに変換
+    const startLatitude =
+        startPoint.latitude * Math.PI / 180;
+
+    const goalLatitude =
+        goalPoint.latitude * Math.PI / 180;
+
+    const latitudeDifference =
+        (goalPoint.latitude - startPoint.latitude) * Math.PI / 180;
+
+    const longitudeDifference =
+        (goalPoint.longitude - startPoint.longitude) * Math.PI / 180;
+
+    // Haversine公式で距離を計算
+    const a =
+        Math.sin(latitudeDifference / 2) ** 2 +
+        Math.cos(startLatitude) *
+        Math.cos(goalLatitude) *
+        Math.sin(longitudeDifference / 2) ** 2;
+
+    const c = 2 * Math.atan2(
+        Math.sqrt(a),
+        Math.sqrt(1 - a)
+    );
+
+    return earthRadius * c;
+}
+
+
+// ----------------------------------------
+// ルート上の座標を取得
+// ----------------------------------------
+
+function getRoutePosition(startPoint, goalPoint, rate) {
+
+    // 出発地点から目的地までの緯度・経度を補間
+    return {
+        latitude:
+            startPoint.latitude +
+            (goalPoint.latitude - startPoint.latitude) * rate,
+
+        longitude:
+            startPoint.longitude +
+            (goalPoint.longitude - startPoint.longitude) * rate
+    };
+}
+
+
+// 地形移動アニメーションを停止
+export function stopTerrainRouteAnimation() {
+
+    // アニメーションを停止
+    isRouteAnimating = false;
+
+    // DEM取得リクエストを無効化
+    terrainRequestId++;
+
+    // DEM取得中フラグを解除
+    isTerrainUpdating = false;
+
+    // アニメーションループを停止
+    if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+    }
+
+    // // OrbitControlsを元に戻す
+    // controls.enabled = previousControlsEnabled;
+
+    // アニメーション用マーカーを削除
+    if (terrainAnimationMapMarker) {
+        animationLeafletMap.removeLayer(terrainAnimationMapMarker);
+        terrainAnimationMapMarker = null;
+    }
+
+    // 現在地点マーカーを再表示
+    if (currentLocationMarker) {
+        currentLocationMarker.setOpacity(1);
+    }
+
+    // 地図操作を有効化
+    setMapClickEnabled(animationLeafletMap, true);
+
+    // 地図上の現在地点マーカーを削除
+    if (terrainAnimationMapMarker) {
+        animationLeafletMap.removeLayer(terrainAnimationMapMarker);
+        terrainAnimationMapMarker = null;
+    }
+
+    // ボタン状態を変更
+    document.getElementById('terrainAnimationPlay').disabled = false;
+    document.getElementById('terrainAnimationStop').disabled = true;
+}
+
+
+// 停止ボタン
+document.getElementById('terrainAnimationStop')
+    .addEventListener('click', () => {
+        stopTerrainRouteAnimation();
+    });
+
+
+// 地図クリックの有効・無効を切り替え
+function setMapClickEnabled(leafletMap, enabled) {
+
+    if (enabled) {
+        leafletMap.getContainer().style.pointerEvents = '';
+    } else {
+        leafletMap.getContainer().style.pointerEvents = 'none';
+    }
+}
+
+
+// 地図上の現在地点マーカーを更新
+function updateTerrainAnimationMapMarker(leafletMap, position) {
+
+    const latLng = L.latLng(
+        position.latitude,
+        position.longitude
+    );
+
+    if (!terrainAnimationMapMarker) {
+
+        // マーカーを生成
+        terrainAnimationMapMarker = L.marker(latLng, {
+            title: '現在地点'
+        });
+
+        terrainAnimationMapMarker.addTo(leafletMap);
+
+    } else {
+
+        // 既存マーカーの位置を更新
+        terrainAnimationMapMarker.setLatLng(latLng);
     }
 }
