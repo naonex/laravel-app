@@ -1,33 +1,8 @@
+
 <x-app-layout>
   <x-slot name="additionalHead">
     <!-- FFmpeg -->
     <script src="{{ asset('assets/js/tool/ffmpeg/0.11.6/ffmpeg.min.js') }}"></script>
-
-    <style>
-      #video-compressor {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        padding: 1rem;
-      }
-
-      #video-compressor #compressedFiles {
-        margin-top: 1em;
-        max-width: 100%;
-      }
-
-      #video-compressor .compressedFile {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        column-gap: 1em;
-        align-items: center;
-      }
-
-      #video-compressor .compressedFile p {
-        margin: 0;
-        overflow-wrap: anywhere;
-      }
-    </style>
   </x-slot>
 
   <x-slot name="header">
@@ -36,81 +11,122 @@
     </h2>
   </x-slot>
 
-  <div id="video-compressor">
+<div id="video-compressor"
+     class="flex flex-col items-center p-4">
+
     <h3>Upload a video to transcode to mp4 (x264) and play!</h3>
 
-    <input type="file" id="uploader" multiple>
+    <!-- CRF設定 -->
+    <div class="quality-setting flex flex-col items-center w-fit my-4">
+      <label for="crf">Compression quality (CRF):</label>
+
+      <input
+        type="range"
+        id="crf"
+        min="18"
+        max="35"
+        value="23"
+        step="1"
+        list="crfMarks">
+
+      <datalist id="crfMarks">
+        <option value="18"></option>
+        <option value="23" label="Default"></option>
+        <option value="28"></option>
+        <option value="35"></option>
+      </datalist>
+
+      <div>
+        CRF: <strong id="crfValue">23</strong>
+      </div>
+
+      <p class="mt-2 w-[400px] max-w-full text-sm text-gray-600">
+        数値が小さいほど高画質、大きいほど高圧縮になります。
+        初期値は23（libx264標準設定）です。
+      </p>
+    </div>
+
+    <!-- エンコード速度設定 -->
+    <div class="preset-setting flex flex-col items-center my-2">
+      <label for="preset">Encoding speed (Preset):</label>
+
+      <select id="preset" class="border border-gray-300 rounded px-100 py-1">
+        <option value="ultrafast">ultrafast</option>
+        <option value="superfast">superfast</option>
+        <option value="veryfast">veryfast</option>
+        <option value="faster">faster</option>
+        <option value="fast">fast</option>
+        <option value="medium" selected>medium (Default)</option>
+        <option value="slow">slow</option>
+        <option value="slower">slower</option>
+        <option value="veryslow">veryslow</option>
+      </select>
+
+      <p class="mt-1 text-sm text-gray-600">
+        処理速度が速いほど圧縮効率は低く、遅いほど圧縮効率は高くなります。
+      </p>
+    </div>
+
+
+<!-- ファイル選択 -->
+<div class="flex flex-col items-center gap-3 my-4">
+    <input type="file" id="uploader" accept="video/*" multiple>
+
+    <!-- 選択ファイル一覧 -->
+    <div id="selectedFiles" class="w-full max-w-2xl"></div>
+
+    <!-- 圧縮開始ボタン -->
     <button
-      type="button"
-      onclick="cancel()"
-      class="border border-gray-400 rounded px-3 py-1 bg-white hover:bg-gray-100">
-      Cancel
+        type="button"
+        id="startCompression"
+        disabled
+        class="border border-blue-500 rounded px-4 py-2 bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed">
+        Start Compression
     </button>
 
-    <div id="compressedFiles"></div>
+    <!-- キャンセル -->
+    <button
+        type="button"
+        id="cancelCompression"
+        class="border border-gray-400 rounded px-3 py-1 bg-white hover:bg-gray-100">
+        Cancel
+    </button>
+
+    <!-- 結合 -->
+    <button
+      type="button"
+      id="mergeVideos"
+      disabled
+      class="border border-green-600 rounded px-4 py-2 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed">
+      Merge Videos
+  </button>
+</div>
+
+
+
+
+    <div id="compressedFiles" class="mt-4 max-w-full"></div>
     <p id="progress"></p>
   </div>
 
-  <script>
-    const { createFFmpeg, fetchFile } = FFmpeg;
-    let ffmpeg = null;
+  <!-- 動画プレビューモーダル -->
+  <div id="videoModal"
+      class="hidden fixed inset-0 z-50 items-center justify-center bg-black/70">
 
-    const transcode = async ({ target: { files } }) => {
-      const compressedFiles = document.getElementById('compressedFiles');
-      const progress = document.getElementById('progress');
-      if (ffmpeg === null) {
-        ffmpeg = createFFmpeg({ 
-          log: true, 
-          progress: ({ ratio }) => {
-            progress.innerHTML = `Complete: ${(ratio * 100.0).toFixed(2)}%`;
-          }
-        });
-      }
-      progress.innerHTML = 'Loading ffmpeg-core.js';
-      if (!ffmpeg.isLoaded()) {
-        await ffmpeg.load();
-      }
-      for (let i = 0; i < files.length; i++) {
-        // 圧縮ファイルのDOM作成
-        let compressedFile = document.createElement("div");
-        compressedFile.classList.add("compressedFile")
-        compressedFiles.append(compressedFile);
-        // メッセージフィールド作成
-        let message = document.createElement("p");
-        compressedFile.append(message);
-        // ファイル名設定
-        let { name } = files[i];
-        let outputName = name.split('.').slice(0, -1).join('.') + '.ffmpeg.mp4'
-        
-        message.innerHTML = name + ' Start transcoding';
-        // ffmpeg実行
-        ffmpeg.FS('writeFile', name, await fetchFile(files[i]));
-        await ffmpeg.run('-i', name, outputName);  // runでffmpegコマンドを実行する。公式サイトなどでオプション確認して使用できるはず
-        let data = ffmpeg.FS('readFile', outputName);
-        
-        // 画面上で動画再生できなくて良いので無効化
-        //const video = document.getElementById('output-video');
-        //video.src = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
-        
-        // ダウンロードURL作成
-        let downloadUrl = document.createElement("a");
-        downloadUrl.href = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
-        downloadUrl.download = outputName;  // ダウンロードデフォファイル名
-        downloadUrl.textContent = outputName;
-        compressedFile.append(downloadUrl);
+      <div class="relative bg-white p-4 rounded-lg max-w-3xl w-full mx-4">
 
-        message.innerHTML = name + ' Complete transcoding';
-      }
-      progress.innerHTML = 'All completed';
-    }
-    const elm = document.getElementById('uploader');
-    elm.addEventListener('change', transcode);
+          <button id="closeVideoModal"
+                  class="absolute top-2 right-3 text-2xl">
+              &times;
+          </button>
 
-    const cancel = () => {
-      try {
-        ffmpeg.exit();
-      } catch(e) {}
-      ffmpeg = null;
-    }
-  </script>
+          <video id="previewVideo"
+                class="w-full mt-6"
+                controls>
+          </video>
+
+      </div>
+  </div>
+
+  @vite('resources/js/tool/ffmpeg/transcode.js')
 </x-app-layout>

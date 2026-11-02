@@ -29,7 +29,7 @@ Route::middleware('auth')->group(function () {
         return response()
             ->view('tool/ffmpeg/transcode')
             // NOTE: このheaderがないとSharedArrayBufferが使えない
-            ->header("Cross-Origin-Embedder-Policy", "require-corp")
+            ->header("Cross-Origin-Embedder-Policy", "credentialless")
             ->header("Cross-Origin-Opener-Policy", "same-origin");
     })->name('ffmpeg.transcode');
 });
