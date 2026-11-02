@@ -10,7 +10,7 @@
       crossorigin=""></script>
 
     <!-- jsを読み込む ※Mapより後で実行（内部でMapを使えるようにするため） -->
-    @vite('resources/js/three/openstreetmap/index.js')
+    @vite('resources/js/three/openstreetmap.js')
   </x-slot>
 
   <x-slot name="header">
@@ -30,27 +30,21 @@
       <div id="terrain3d"
         class="w-full h-[500px] bg-slate-800">
       </div>
-
       <div id="terrainStatus" class="mt-2 text-gray-500">
         地図をクリックすると地形を表示します。
       </div>
-
       <!-- ルートアニメーション操作パネル -->
       <div class="mb-4 rounded-lg border border-gray-300 bg-white p-4 shadow-sm">
-
         <div class="mb-3 text-sm font-semibold text-gray-700">
           ルートアニメーション
         </div>
-
         <div class="flex flex-wrap items-end gap-3">
-
           <!-- 移動方式 -->
           <div class="flex flex-col gap-1">
             <label for="terrainAnimationMode"
               class="text-xs font-medium text-gray-600">
               移動方式
             </label>
-
             <div class="relative">
               <select
                 id="terrainAnimationMode"
@@ -58,27 +52,15 @@
                 <option value="speed">速度指定</option>
                 <option value="duration">時間指定</option>
               </select>
-
-              <!-- 独自の下向き矢印 -->
-              <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
-                <svg class="h-4 w-4" fill="none" stroke="currentColor"
-                  viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round"
-                    stroke-width="2" d="m6 9 6 6 6-6" />
-                </svg>
-              </div>
             </div>
           </div>
-
           <!-- 速度指定 -->
           <div id="terrainAnimationSpeedArea"
             class="flex-col gap-1">
-
             <label for="terrainAnimationSpeed"
               class="text-xs font-medium text-gray-600">
               移動速度
             </label>
-
             <div class="flex">
               <input
                 type="number"
@@ -87,22 +69,18 @@
                 min="1"
                 max="1000"
                 class="w-24 rounded-l-md border border-gray-300 px-3 py-2 text-sm text-gray-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
-
               <span class="rounded-r-md border border-l-0 border-gray-300 bg-gray-100 px-3 py-2 text-sm text-gray-600">
                 m/s
               </span>
             </div>
           </div>
-
           <!-- 時間指定 -->
           <div id="terrainAnimationDurationArea"
             class="hidden flex-col gap-1">
-
             <label for="terrainAnimationDurationInput"
               class="text-xs font-medium text-gray-600">
               移動時間
             </label>
-
             <div class="flex">
               <input
                 type="number"
@@ -111,7 +89,6 @@
                 min="1"
                 max="3600"
                 class="w-24 rounded-l-md border border-gray-300 px-3 py-2 text-sm text-gray-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
-
               <span class="rounded-r-md border border-l-0 border-gray-300 bg-gray-100 px-3 py-2 text-sm text-gray-600">
                 秒
               </span>

@@ -7,9 +7,10 @@ export default defineConfig({
             input: [
                 'resources/css/app.css',
                 'resources/js/app.js',
-                'resources/js/three/index.js',
-                'resources/js/three/openstreetmap/index.js',
-                'resources/js/tool/ffmpeg/transcode.js',
+                
+                // 追加したjsファイル
+                'resources/js/three/openstreetmap.js',
+                'resources/js/ffmpeg/transcode.js',
             ],
             refresh: true,
         }),

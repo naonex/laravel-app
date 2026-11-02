@@ -16,22 +16,19 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
-    // NOTE: 以下のルーティングを追加
-    Route::get('/three', function () {
-        return view('three.index');
-    })->name('three');
+    // threeマップ画面
     Route::get('/three/openstreetmap', function () {
-        return view('three.openstreetmap.index');
+        return view('three.openstreetmap');
     })->name('threeOpenstreetmap');
 
     // 動画圧縮画面
     Route::get('/ffmpeg/transcode', function () {
         return response()
-            ->view('tool/ffmpeg/transcode')
+            ->view('ffmpeg.transcode')
             // NOTE: このheaderがないとSharedArrayBufferが使えない
             ->header("Cross-Origin-Embedder-Policy", "credentialless")
             ->header("Cross-Origin-Opener-Policy", "same-origin");
-    })->name('ffmpeg.transcode');
+    })->name('ffmpegTranscode');
 });
 
 require __DIR__.'/auth.php';

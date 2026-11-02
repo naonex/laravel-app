@@ -14,9 +14,6 @@
             </div>
             <div class="mt-2 bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6 text-gray-900 grid">
-                    <a class="font-medium text-blue-600 dark:text-red-500 hover:underline" href="{{ route('three') }}">
-                        {{ __('screens.three') }}
-                    </a>
                     <a class="font-medium text-blue-600 dark:text-red-500 hover:underline" href="{{ route('threeOpenstreetmap') }}">
                         {{ __('screens.threeOpenstreetmap') }}
                     </a>
@@ -24,8 +21,8 @@
             </div>
             <div class="mt-2 bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6 text-gray-900 grid">
-                    <a class="font-medium text-blue-600 dark:text-red-500 hover:underline" href="{{ route('ffmpeg.transcode') }}">
-                        {{ __('screens.ffmpeg.transcode') }}
+                    <a class="font-medium text-blue-600 dark:text-red-500 hover:underline" href="{{ route('ffmpegTranscode') }}">
+                        {{ __('screens.ffmpegTranscode') }}
                     </a>
                 </div>
             </div>
