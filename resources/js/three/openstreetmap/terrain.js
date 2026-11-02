@@ -1156,6 +1156,7 @@ function animateTerrain() {
                 // controls.enabled = previousControlsEnabled;
 
                 // アニメーション終了
+                console.log("アニメループ");
                 stopTerrainRouteAnimation();
 
                 console.log('地形移動アニメーション終了');
@@ -1355,6 +1356,29 @@ export function stopTerrainRouteAnimation() {
     // // OrbitControlsを元に戻す
     // controls.enabled = previousControlsEnabled;
 
+    // // アニメーション用マーカーを削除
+    // if (terrainAnimationMapMarker) {
+    //     animationLeafletMap.removeLayer(terrainAnimationMapMarker);
+    //     terrainAnimationMapMarker = null;
+    // }
+
+    // // 現在地点マーカーを再表示
+    // if (currentLocationMarker) {
+    //     currentLocationMarker.setOpacity(1);
+    // }
+
+    // 地図操作を有効化
+    console.log('animationLeafletMap:', animationLeafletMap);
+    setMapClickEnabled(animationLeafletMap, true);
+
+    // ボタン状態を変更
+    document.getElementById('terrainAnimationPlay').disabled = false;
+    document.getElementById('terrainAnimationStop').disabled = true;
+}
+
+
+// マーカーリセット
+export function resetMarker() {
     // アニメーション用マーカーを削除
     if (terrainAnimationMapMarker) {
         animationLeafletMap.removeLayer(terrainAnimationMapMarker);
@@ -1365,31 +1389,32 @@ export function stopTerrainRouteAnimation() {
     if (currentLocationMarker) {
         currentLocationMarker.setOpacity(1);
     }
-
-    // 地図操作を有効化
-    setMapClickEnabled(animationLeafletMap, true);
-
-    // 地図上の現在地点マーカーを削除
-    if (terrainAnimationMapMarker) {
-        animationLeafletMap.removeLayer(terrainAnimationMapMarker);
-        terrainAnimationMapMarker = null;
-    }
-
-    // ボタン状態を変更
-    document.getElementById('terrainAnimationPlay').disabled = false;
-    document.getElementById('terrainAnimationStop').disabled = true;
 }
 
 
 // 停止ボタン
+console.count('停止ボタンイベント登録');
 document.getElementById('terrainAnimationStop')
     .addEventListener('click', () => {
+        console.log("停止ボタン");
         stopTerrainRouteAnimation();
     });
 
 
 // 地図クリックの有効・無効を切り替え
 function setMapClickEnabled(leafletMap, enabled) {
+
+    console.log('setMapClickEnabled:', {
+        leafletMap,
+        enabled,
+        time: performance.now()
+    });
+
+    if (!leafletMap) {
+        console.warn('leafletMap is null');
+        return;
+    }
+
 
     if (enabled) {
         leafletMap.getContainer().style.pointerEvents = '';

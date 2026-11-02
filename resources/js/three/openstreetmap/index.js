@@ -1,4 +1,4 @@
-import { createTerrain, initTerrain, updateTerrainRoute, startTerrainRouteAnimation } from './terrain.js';
+import { createTerrain, initTerrain, updateTerrainRoute, startTerrainRouteAnimation, resetMarker } from './terrain.js';
 
 // 福岡市を初期表示位置に設定
 const defaultPosition = [33.5902, 130.4017];
@@ -110,6 +110,8 @@ leafletMap.on('click', (e) => {
     if (selectedLocationMarker) {
         leafletMap.removeLayer(selectedLocationMarker);
     }
+    // アニメーション時のマーカーをリセット
+    resetMarker();
 
     // クリック地点にマーカーを配置
     selectedLocationMarker = L.marker([latitude, longitude], { icon: selectedLocationIcon })
