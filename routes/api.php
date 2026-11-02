@@ -2,7 +2,6 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\ImageGetter;
 
 /*
 |--------------------------------------------------------------------------
@@ -18,6 +17,3 @@ use App\Http\Controllers\ImageGetter;
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
-
-// 以下追加
-Route::get('/image', [ImageGetter::class, 'imageGet']);
