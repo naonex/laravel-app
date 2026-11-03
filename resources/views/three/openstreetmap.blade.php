@@ -66,8 +66,8 @@
                 type="number"
                 id="terrainAnimationSpeed"
                 value="1000"
-                min="1"
-                max="1000"
+                min="100"
+                max="10000"
                 class="w-24 rounded-l-md border border-gray-300 px-3 py-2 text-sm text-gray-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
               <span class="rounded-r-md border border-l-0 border-gray-300 bg-gray-100 px-3 py-2 text-sm text-gray-600">
                 m/s
@@ -85,9 +85,9 @@
               <input
                 type="number"
                 id="terrainAnimationDurationInput"
-                value="10"
+                value="5"
                 min="1"
-                max="3600"
+                max="60"
                 class="w-24 rounded-l-md border border-gray-300 px-3 py-2 text-sm text-gray-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
               <span class="rounded-r-md border border-l-0 border-gray-300 bg-gray-100 px-3 py-2 text-sm text-gray-600">
                 秒
@@ -101,7 +101,8 @@
             <button
               type="button"
               id="terrainAnimationPlay"
-              class="rounded-md bg-blue-600 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+              class="rounded-md bg-blue-600 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled>
               ▶ 再生
             </button>
 
