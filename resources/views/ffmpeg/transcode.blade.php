@@ -123,28 +123,24 @@
             </h3>
           </div>
 
-          <!-- ファイル選択 -->
-          <div class="mb-4">
-            <label
-              for="uploader"
-              class="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-6 cursor-pointer hover:bg-gray-50 transition">
-
-              <span class="text-gray-600 font-medium text-sm">
+          <!-- ファイル選択・ドラッグ＆ドロップ -->
+          <div
+            id="dropArea"
+            class="mb-4 border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:bg-gray-50 transition">
+            <label for="uploader" class="cursor-pointer block">
+              <div class="text-gray-600 font-medium text-sm">
                 動画ファイルを追加
-              </span>
-
-              <span class="text-gray-400 text-xs mt-2">
-                複数ファイル選択可能
-              </span>
-
-              <input
-                type="file"
-                id="uploader"
-                accept="video/*"
-                multiple
-                class="hidden">
-
+              </div>
+              <div class="text-gray-400 text-xs mt-2">
+                クリックまたはドラッグ＆ドロップ
+              </div>
             </label>
+            <input
+              type="file"
+              id="uploader"
+              accept="video/*"
+              multiple
+              class="hidden">
           </div>
 
           <!-- 選択ファイル一覧 -->
@@ -170,15 +166,22 @@
 
           <!-- 処理状況 -->
           <div class="bg-gray-50 border border-gray-200 rounded-md p-3 mb-4">
-
-            <h4 class="text-sm font-medium text-gray-700 mb-2">
+            <h4 class="text-sm font-medium text-gray-700 mb-3">
               処理状況
             </h4>
-
-            <p id="progress" class="text-sm text-gray-600">
-              待機中
-            </p>
-
+            <!-- 処理メッセージ・進捗率 -->
+            <div class="flex justify-between items-center text-sm mb-2">
+              <span id="progress">待機中</span>
+              <span id="progressPercent" class="font-semibold">0%</span>
+            </div>
+            <!-- プログレスバー -->
+            <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+              <div
+                id="progressBar"
+                class="bg-blue-600 h-3 rounded-full transition-all duration-200"
+                style="width: 0%">
+              </div>
+            </div>
           </div>
 
           <!-- 圧縮済みファイル一覧 -->
