@@ -2,6 +2,17 @@
   <x-slot name="additionalHead">
     <!-- FFmpeg -->
     <script src="{{ asset('assets/js/tool/ffmpeg/0.11.6/ffmpeg.min.js') }}"></script>
+
+    <style>
+      /* ドラッグ時の挿入位置 */
+      .drag-over-top {
+        border-top: 3px solid #3b82f6 !important;
+      }
+
+      .drag-over-bottom {
+        border-bottom: 3px solid #3b82f6 !important;
+      }
+    </style>
   </x-slot>
 
   <x-slot name="header">
@@ -15,7 +26,7 @@
     <div class="max-w-[1440px] mx-auto">
 
       <!-- メインレイアウト -->
-      <div class="grid grid-cols-1 lg:grid-cols-[240px_minmax(0,1fr)_minmax(0,1fr)] gap-4">
+      <div class="grid grid-cols-1 lg:grid-cols-[240px_minmax(0,1fr)] gap-4">
 
         <!-- 左：設定・操作メニュー -->
         <aside class="bg-white border border-gray-200 rounded-lg p-4 h-fit">
@@ -112,87 +123,81 @@
 
           </div>
 
+          <!-- 処理状況 -->
+          <div class="mt-6 pt-4 border-t">
+            <div class="flex justify-between items-center text-sm mb-2">
+              <span id="progress">待機中</span>
+              <span id="progressPercent" class="font-semibold">0%</span>
+            </div>
+
+            <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+              <div
+                id="progressBar"
+                class="bg-blue-600 h-2 rounded-full transition-all duration-200"
+                style="width: 0%"></div>
+            </div>
+          </div>
+
         </aside>
 
-        <!-- 中央：入力動画一覧 -->
+        <!-- 右：動画一覧 -->
         <section class="bg-white border border-gray-200 rounded-lg p-4 min-w-0">
 
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="font-semibold text-gray-800 text-lg">
-              入力動画一覧
-            </h3>
-          </div>
+          <h3 class="font-semibold text-gray-800 text-lg mb-4">
+            動画一覧
+          </h3>
 
           <!-- ファイル選択・ドラッグ＆ドロップ -->
           <div
             id="dropArea"
-            class="mb-4 border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:bg-gray-50 transition">
-            <label for="uploader" class="cursor-pointer block">
-              <div class="text-gray-600 font-medium text-sm">
-                動画ファイルを追加
-              </div>
-              <div class="text-gray-400 text-xs mt-2">
-                クリックまたはドラッグ＆ドロップ
-              </div>
-            </label>
+            class="border-2 border-dashed border-gray-300 rounded-lg p-6
+              text-center cursor-pointer
+              transition-all duration-200
+              hover:border-blue-400 hover:bg-blue-50 hover:shadow-md">
             <input
               type="file"
               id="uploader"
               accept="video/*"
               multiple
               class="hidden">
-          </div>
 
-          <!-- 選択ファイル一覧 -->
-          <div>
-            <h4 class="text-sm font-medium text-gray-700 mb-3">
-              選択ファイル
-            </h4>
-
-            <div id="selectedFiles" class="w-full space-y-2">
+            <!-- 通常時 -->
+            <div id="dropMessageNormal" class="pointer-events-none">
+              <div class="text-gray-500 text-sm">
+                動画をドラッグ＆ドロップ
+              </div>
+              <div class="text-gray-400 text-xs mt-1">
+                またはクリックしてファイルを選択
+              </div>
             </div>
-          </div>
 
-        </section>
-
-        <!-- 右：変換結果一覧 -->
-        <section class="bg-white border border-gray-200 rounded-lg p-4 min-w-0">
-
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="font-semibold text-gray-800 text-lg">
-              変換結果一覧
-            </h3>
-          </div>
-
-          <!-- 処理状況 -->
-          <div class="bg-gray-50 border border-gray-200 rounded-md p-3 mb-4">
-            <h4 class="text-sm font-medium text-gray-700 mb-3">
-              処理状況
-            </h4>
-            <!-- 処理メッセージ・進捗率 -->
-            <div class="flex justify-between items-center text-sm mb-2">
-              <span id="progress">待機中</span>
-              <span id="progressPercent" class="font-semibold">0%</span>
-            </div>
-            <!-- プログレスバー -->
-            <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-              <div
-                id="progressBar"
-                class="bg-blue-600 h-3 rounded-full transition-all duration-200"
-                style="width: 0%">
+            <!-- ドラッグ中 -->
+            <div id="dropMessageActive" class="hidden pointer-events-none">
+              <div class="text-blue-700 font-semibold text-sm">
+                ここに動画をドロップしてください
+              </div>
+              <div class="text-blue-600 text-xs mt-1">
+                ファイルを離すと追加されます
               </div>
             </div>
           </div>
 
-          <!-- 圧縮済みファイル一覧 -->
-          <div>
-            <h4 class="text-sm font-medium text-gray-700 mb-3">
-              出力ファイル
-            </h4>
+          <!-- 動画一覧の見出し -->
+          <div class="grid grid-cols-[40px_minmax(0,1fr)_minmax(0,1fr)_64px_40px]
+                      items-center gap-2 border-b bg-gray-50 px-2 py-2
+                      text-xs font-semibold text-gray-600">
 
-            <div id="compressedFiles" class="max-w-full space-y-2">
-            </div>
+            <div class="text-center">対象</div>
+            <div class="border-l pl-2">IN（入力動画）</div>
+            <div class="border-l pl-2">OUT（出力動画）</div>
+            <div></div><!-- 入れ替えアイコン -->
+            <div class="border-l pl-2 text-center">削除</div>
           </div>
+          <!-- 動画一覧 -->
+          <div id="selectedFiles"></div>
+
+          <!-- 結合結果 -->
+          <div id="mergedVideoResult"></div>
 
         </section>
 
@@ -204,8 +209,7 @@
 
   <!-- 動画プレビューモーダル -->
   <div id="videoModal"
-    class="hidden fixed inset-0 z-50 items-center justify-center bg-black/70">
-
+    class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70">
     <div class="relative bg-white p-4 rounded-lg max-w-3xl w-full mx-4">
 
       <button
