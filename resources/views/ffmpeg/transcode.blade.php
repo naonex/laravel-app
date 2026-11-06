@@ -228,6 +228,6 @@
 
   </div>
 
-  @vite('resources/js/ffmpeg/transcode.js')
+  @vite('resources/js/ffmpeg/index.js')
 
 </x-app-layout>
