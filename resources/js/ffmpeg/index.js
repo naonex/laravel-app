@@ -1,12 +1,12 @@
-const { createFFmpeg, fetchFile } = FFmpeg;  // NOTE: FFmpegはbladeでminを読み込む形式なので、importではなくconstで取得する
+import {
+    transcodeVideos,
+    mergeVideos as executeMergeVideos,
+    cancelTranscode
+} from './transcode.js';
 
-let ffmpeg = null;
 
 // 選択された動画ファイル
 let selectedFiles = [];
-
-// 処理状態
-let isProcessing = false;
 
 // ボタン要素
 const startButton = document.getElementById('startCompression');
@@ -22,11 +22,6 @@ const presetInput = document.getElementById('preset');
 const progress = document.getElementById('progress');
 const progressBar = document.getElementById('progressBar');
 const progressPercent = document.getElementById('progressPercent');
-
-// 進捗管理
-let currentFileIndex = 0;
-let totalFiles = 0;
-let progressMode = null;
 
 // ファイル選択・一覧要素
 const uploader = document.getElementById('uploader');
@@ -61,11 +56,13 @@ closeVideoModal.addEventListener('click', () => {
     previewVideo.src = '';
 });
 
+
 // --------------------
 // ボタン操作
 // --------------------
 // 動画圧縮処理
 const transcode = async () => {
+
     // 圧縮対象の動画を取得
     const files = selectedFiles.filter(file => file.included);
 
@@ -76,125 +73,32 @@ const transcode = async () => {
     }
 
     // CRF値取得
-    // CRF（Constant Rate Factor）
-    // 値が小さいほど高画質・低圧縮（ファイルサイズ大）
-    // 値が大きいほど低画質・高圧縮（ファイルサイズ小）
     const crf = crfInput.value;
 
     // Preset
-    // ultrafastに近いほど処理速度が速く、圧縮効率は低い
-    // veryslowに近いほど処理速度が遅く、圧縮効率は高い
-    // デフォルトはmedium
     const preset = presetInput.value;
 
-    // 進捗初期化
-    currentFileIndex = 0;
-    totalFiles = files.length;
-    progressMode = null;
+    await transcodeVideos(files, {
+        crf,
+        preset,
 
-    updateProgressBar(0);
-    progress.textContent = 'FFmpeg準備中';
-
-    if (ffmpeg === null) {
-        ffmpeg = createFFmpeg({
-            log: true,
-            progress: ({ ratio }) => {
-
-                // 有効な進捗率か確認
-                if (!Number.isFinite(ratio)) {
-                    return;
-                }
-
-                let percent = 0;
-
-                if (progressMode === 'transcode') {
-                    // 複数ファイル全体の進捗率
-                    percent = (
-                        (currentFileIndex + ratio) / totalFiles
-                    ) * 100;
-
-                } else if (progressMode === 'merge') {
-                    // 動画結合の進捗率
-                    percent = ratio * 100;
-                }
-
+        // 進捗更新
+        onProgress: ({ percent, message }) => {
+            if (percent !== undefined) {
                 updateProgressBar(percent);
             }
-        });
-    }
 
-    progress.textContent = 'FFmpeg読み込み中';
+            if (message) {
+                progress.textContent = message;
+            }
+        },
 
-    if (!ffmpeg.isLoaded()) {
-        await ffmpeg.load();
-    }
-
-    // 全体の圧縮処理を開始
-    progressMode = 'transcode';
-
-    for (let i = 0; i < files.length; i++) {
-
-        // 現在処理中のファイル番号
-        currentFileIndex = i;
-
-        // 処理状態を更新
-        files[i].status = 'processing';
-        renderSelectedFiles();
-
-        // ファイル名設定
-        const file = files[i].originalFile;
-        const { name } = file;
-
-        const outputName =
-            name.split('.').slice(0, -1).join('.') + '.ffmpeg.mp4';
-
-        progress.textContent = `${i + 1} / ${files.length} 圧縮中`;
-
-        // ffmpeg実行
-        ffmpeg.FS('writeFile', name, await fetchFile(file));
-
-        await ffmpeg.run(
-            '-i', name,
-            '-c:v', 'libx264',
-            '-crf', crf,
-            '-preset', preset,
-            '-c:a', 'aac',
-            '-b:a', '128k',
-            outputName
-        );
-
-        // 圧縮結果を取得
-        const data = ffmpeg.FS('readFile', outputName);
-
-        // 動画URL作成
-        const videoUrl = URL.createObjectURL(
-            new Blob([data.buffer], { type: 'video/mp4' })
-        );
-
-        // 圧縮後のファイル情報を更新
-        files[i].compressedName = outputName;
-        files[i].videoUrl = videoUrl;
-        files[i].compressedSize = data.byteLength;
-        files[i].status = 'completed';
-
-        // ファイル単位の進捗を確定
-        updateProgressBar(
-            ((i + 1) / files.length) * 100
-        );
-
-        // 一覧を更新
-        renderSelectedFiles();
-    }
-
-    progressMode = null;
-
-    updateProgressBar(100);
-
-    progress.textContent = 'すべての圧縮が完了しました';
-
-    // 圧縮後のファイル名で一覧を更新
-    renderSelectedFiles();
-}
+        // 一覧更新
+        onFileUpdate: () => {
+            renderSelectedFiles();
+        }
+    });
+};
 startButton.addEventListener('click', transcode);
 
 // 動画結合処理
@@ -210,51 +114,28 @@ const mergeVideos = async () => {
         return;
     }
 
-    // 進捗初期化
-    progressMode = 'merge';
-    updateProgressBar(0);
+try {
+        // 動画結合を実行
+        const result = await executeMergeVideos(files, {
 
-    try {
-        progress.textContent = '結合中';
+            // 進捗更新
+            onProgress: ({ percent, message }) => {
+                if (percent !== undefined) {
+                    updateProgressBar(percent);
+                }
 
-        // 結合ファイル名を生成
-        const mergedFileName = `merged_${Date.now()}.mp4`;
-        
-        // 結合リストを作成
-        // ファイル名に空白やシングルクォートが含まれていても扱えるようにする
-        const concatList = selectedFiles
-            .map(file => {
-                const escapedName = file.compressedName
-                    .replace(/\\/g, '\\\\')
-                    .replace(/'/g, "'\\''");
-
-                return `file '${escapedName}'`;
-            })
-            .join('\n');
-
-        // FFmpegに結合対象のリストを渡す
-        ffmpeg.FS(
-            'writeFile',
-            'input.txt',
-            new TextEncoder().encode(concatList)
-        );
-
-        // 動画を結合
-        await ffmpeg.run(
-            '-f', 'concat',
-            '-safe', '0',
-            '-i', 'input.txt',
-            '-c', 'copy',
-            mergedFileName
-        );
+                if (message) {
+                    progress.textContent = message;
+                }
+            }
+        });
 
         // 結合結果を取得
-        const data = ffmpeg.FS('readFile', mergedFileName);
-
-        // ダウンロードURL作成
-        const videoUrl = URL.createObjectURL(
-            new Blob([data.buffer], { type: 'video/mp4' })
-        );
+        const {
+            videoUrl,
+            mergedFileName,
+            compressedSize
+        } = result;
 
         // ダウンロードリンク作成
         const downloadLink = document.createElement('a');
@@ -339,7 +220,7 @@ const mergeVideos = async () => {
 
         const outputSize = document.createElement('span');
         outputSize.className = 'text-xs text-gray-500 shrink-0';
-        outputSize.textContent = formatFileSize(data.byteLength);
+        outputSize.textContent = formatFileSize(compressedSize);
 
         outputInfo.append(outputName, outputSize);
         outputArea.append(outputLabel, outputInfo);
@@ -397,7 +278,6 @@ const mergeVideos = async () => {
 
         mergedVideoResult.append(separator, row);
 
-        progressMode = null;
         updateProgressBar(100);
 
         progress.textContent = 'すべての動画を結合しました';
@@ -405,21 +285,14 @@ const mergeVideos = async () => {
     } catch (error) {
         console.error(error);
 
-        progressMode = null;
         progress.textContent = '動画の結合に失敗しました';
     }
 };
 mergeButton.addEventListener('click', mergeVideos);
 
 // キャンセル処理
-const cancel = () => {
-    try {
-        ffmpeg.exit();
-    } catch (e) { }
+cancelButton.addEventListener('click', cancelTranscode);
 
-    ffmpeg = null;
-};
-cancelButton.addEventListener('click', cancel);
 
 // --------------------
 // プログレスバー
