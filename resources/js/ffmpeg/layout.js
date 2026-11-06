@@ -1,68 +1,129 @@
 // (一覧内)ドラッグ中の動画インデックス
 let draggedIndex = null;
 
+
 // --------------------
-// プログレスバー
+// 選択動画一覧の表示
 // --------------------
-// 進捗バー更新
-export function updateProgressBar(
-    percent,
-    progressBar,
-    progressPercent
+export function renderSelectedFiles(
+    files,
+    elements,
+    updateButtons,
+    isProcessing = false
 ) {
-    // 0～100の範囲に制限
-    percent = Math.min(100, Math.max(0, percent));
+    // DOM要素を取得
+    const {
+        selectedFilesElement,
+        videoModal,
+        previewVideo
+    } = elements;
 
-    progressBar.style.width = `${percent}%`;
-    progressPercent.textContent = `${Math.floor(percent)}%`;
-}
+    // 一覧再描画用
+    const render = () => renderSelectedFiles(files, elements, updateButtons, isProcessing);
+    // ドラッグ＆ドロップ設定
+    const setupRowDrag = setupDragAndDrop(files, selectedFilesElement, render, isProcessing);
 
-// --------------------
-// ファイルサイズ
-// --------------------
-// ファイルサイズを読みやすい単位に変換
-function formatFileSize(size) {
-    if (size === null || size === undefined) {
-        return '-';
-    }
+    selectedFilesElement.innerHTML = '';
 
-    const units = ['B', 'KB', 'MB', 'GB'];
-    let value = size;
-    let unitIndex = 0;
+    files.forEach((file, index) => {
+        // 1動画分の行
+        const row = document.createElement('div');
+        row.className = `
+            group
+            grid
+            grid-cols-[40px_minmax(0,1fr)_minmax(0,1fr)_64px_40px]
+            items-center
+            gap-2
+            border-b
+            px-2
+            py-2
+            min-w-0
+            ${isProcessing ? 'cursor-not-allowed' : 'cursor-grab'}
+            hover:bg-blue-50
+            ${file.isProcessing ? 'bg-gray-100 opacity-60' : ''}
+        `;
+        // ドラッグ＆ドロップ設定
+        setupRowDrag(row, index);
 
-    while (value >= 1024 && unitIndex < units.length - 1) {
-        value /= 1024;
-        unitIndex++;
-    }
+        // 対象チェックボックス
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = file.included;
+        checkbox.disabled = isProcessing;
+        checkbox.title = '処理対象にする';
+        checkbox.className = `
+            w-4 h-4
+            ${isProcessing ? 'cursor-not-allowed' : 'cursor-pointer'}
+        `;
+        // チェック変更イベント
+        checkbox.addEventListener('change', () => {
+            file.included = checkbox.checked;
+            updateButtons?.();
+        });
+        // チェックボックス配置
+        const checkboxArea = document.createElement('div');
+        checkboxArea.className = 'flex items-center justify-center';
+        checkboxArea.append(checkbox);
 
-    return `${value.toFixed(2)} ${units[unitIndex]}`;
+        // 入力動画
+        const inputArea = createInputArea([file]);
+
+        // 出力動画
+        const outputArea = createOutputArea({
+            file,
+            videoModal,
+            previewVideo
+        });
+
+        // 並び変え（ドラッグ）可の記号表示
+        const moveControls = document.createElement('div');
+        moveControls.className = 'flex items-center justify-center gap-1 pl-2';
+        const dragHandle = document.createElement('span');
+        dragHandle.textContent = '⠿';
+        dragHandle.title = 'ドラッグして順序を変更';
+        dragHandle.className = `
+            text-xl
+            text-gray-400
+            select-none
+            transition-colors
+            group-hover:text-blue-600
+        `;
+        moveControls.append(dragHandle);
+
+        // 削除ボタン
+        const deleteArea = createDeleteButton(() => {
+            if (file.videoUrl) {
+                URL.revokeObjectURL(file.videoUrl);
+            }
+            files.splice(index, 1);
+            render();
+            updateButtons?.();
+        }, file.isProcessing);
+
+        row.append(
+            checkboxArea,
+            inputArea,
+            outputArea,
+            moveControls,
+            deleteArea
+        );
+        selectedFilesElement.append(row);
+    });
 }
 
 // --------------------
 // 結合結果の表示
 // --------------------
 export function renderMergedVideoResult(
-    files,
-    { videoUrl, mergedFileName, compressedSize },
-    { mergedVideoResult, videoModal, previewVideo }
+    files, elements,
+    { videoUrl, mergedFileName, compressedSize }
 ) {
-    // ダウンロードリンク作成
-    const downloadLink = document.createElement('a');
-    downloadLink.href = videoUrl;
-    downloadLink.download = mergedFileName;
-    downloadLink.textContent = 'Download merged video';
-    downloadLink.classList.add(
-        'text-blue-600',
-        'underline',
-        'hover:text-blue-800'
-    );
-
-    // 結合結果を表示
-    mergedVideoResult.innerHTML = '';
-
-    // 一覧との区切り
-    const separator = document.createElement('div');
-    separator.className = 'border-t-2 border-gray-400 mt-4 pt-4';
+    // DOM要素を取得
+    const {
+        mergedVideoResult,
+        videoModal,
+        previewVideo
+    } = elements;
 
     // 結果行
     const row = document.createElement('div');
@@ -78,16 +139,157 @@ export function renderMergedVideoResult(
     `;
 
     // INエリア
+    const inputArea = createInputArea(files, true);
+
+    // OUTエリア
+    const outputArea = createOutputArea({
+        videoUrl,
+        fileName: mergedFileName,
+        fileSize: compressedSize,
+        videoModal,
+        previewVideo
+    });
+
+    // 削除ボタン
+    const deleteArea = createDeleteButton(() => {
+        row.remove();
+    });
+
+    // 空の列（一覧とのグリッド整合用）
+    const emptyArea = document.createElement('div');
+    const emptyArea2 = document.createElement('div');
+
+    // 行に配置
+    row.append(
+        emptyArea,   // 対象（40px）
+        inputArea,   // IN（1fr）
+        outputArea,  // OUT（1fr）
+        emptyArea2,  // 入れ替え（64px）
+        deleteArea // 削除（40px）
+    );
+
+    mergedVideoResult.append(row);
+}
+
+// --------------------
+// ドラッグ＆ドロップ設定
+// --------------------
+export function setupDragAndDrop(files, container, render, disabled = false) {
+    // ドラッグ中のインデックス
+    let draggedIndex = null;
+
+    // 挿入位置表示のTailwindクラス
+    const dragOverClasses = [
+        'border-t-[3px]',
+        'border-b-[3px]',
+        'border-t-blue-500',
+        'border-b-blue-500'
+    ];
+
+    // 既存の挿入位置表示を解除
+    const clearDragOver = () => {
+        container.querySelectorAll('.drag-over-indicator')
+            .forEach(element => {
+                element.classList.remove(
+                    'drag-over-indicator',
+                    ...dragOverClasses
+                );
+            });
+    };
+
+    // 行ごとのイベント設定
+    return (row, index) => {
+        // 処理中はドラッグを無効化
+        row.draggable = !disabled;
+        if (disabled) return;
+
+        // ドラッグ開始
+        row.addEventListener('dragstart', (event) => {
+            draggedIndex = index;
+
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', String(index));
+
+            row.classList.add('opacity-40');
+        });
+
+        // ドラッグ中
+        row.addEventListener('dragover', (event) => {
+            event.preventDefault();
+
+            event.dataTransfer.dropEffect = 'move';
+
+            if (draggedIndex === null || draggedIndex === index) {
+                return;
+            }
+
+            const rect = row.getBoundingClientRect();
+            const isAfter = event.clientY >= rect.top + rect.height / 2;
+
+            clearDragOver();
+
+            row.classList.add(
+                'drag-over-indicator',
+                isAfter ? 'border-b-[3px]' : 'border-t-[3px]',
+                isAfter ? 'border-b-blue-500' : 'border-t-blue-500'
+            );
+        });
+
+        // ドラッグ終了
+        row.addEventListener('dragend', () => {
+            draggedIndex = null;
+
+            clearDragOver();
+
+            row.classList.remove('opacity-40');
+        });
+
+        // ドロップ
+        row.addEventListener('drop', (event) => {
+            event.preventDefault();
+
+            if (draggedIndex === null || draggedIndex === index) {
+                return;
+            }
+
+            const rect = row.getBoundingClientRect();
+            const isAfter = event.clientY >= rect.top + rect.height / 2;
+
+            const [movedFile] = files.splice(draggedIndex, 1);
+
+            let targetIndex = index + (isAfter ? 1 : 0);
+
+            if (draggedIndex < targetIndex) {
+                targetIndex--;
+            }
+
+            files.splice(targetIndex, 0, movedFile);
+
+            draggedIndex = null;
+
+            render();
+        });
+    };
+}
+
+// --------------------
+// 各パーツのレイアウト
+// --------------------
+/* INエリア生成 */
+function createInputArea(files, useCompressed = false) {
+    // INエリア
     const inputArea = document.createElement('div');
-    inputArea.className = 'flex items-center gap-2 min-w-0 w-full pl-2';
+    inputArea.className = `flex items-center gap-2 min-w-0 w-full pl-2 ${
+        useCompressed ? '' : 'border-l'
+    }`;
 
     const inputLabel = document.createElement('span');
     inputLabel.className = 'text-xs font-semibold text-blue-600 shrink-0';
     inputLabel.textContent = 'IN';
 
-    // 結合元ファイル一覧
+    // ファイル情報一覧
     const inputList = document.createElement('div');
-    inputList.className = 'flex flex-col gap-1 min-w-0';
+    inputList.className = 'flex flex-col gap-1 min-w-0 flex-1';
 
     files.forEach((file, index) => {
         // 1ファイル分の情報
@@ -96,12 +298,22 @@ export function renderMergedVideoResult(
 
         const inputName = document.createElement('span');
         inputName.className = 'text-sm truncate min-w-0';
-        inputName.textContent = file.compressedName;
-        inputName.title = `${index + 1}. ${file.compressedName}`;
 
         const inputSize = document.createElement('span');
         inputSize.className = 'text-xs text-gray-500 shrink-0';
-        inputSize.textContent = formatFileSize(file.compressedSize);
+
+        // ファイル名とサイズ
+        const fileName = useCompressed
+            ? file.compressedName
+            : file.originalFile.name;
+
+        const fileSize = useCompressed
+            ? file.compressedSize
+            : file.originalFile.size;
+
+        inputName.textContent = fileName;
+        inputName.title = `${index + 1}. ${fileName}`;
+        inputSize.textContent = formatFileSize(fileSize);
 
         inputInfo.append(inputName, inputSize);
         inputList.append(inputInfo);
@@ -109,6 +321,19 @@ export function renderMergedVideoResult(
 
     inputArea.append(inputLabel, inputList);
 
+    return inputArea;
+}
+
+/* OUTエリア生成 */
+function createOutputArea({
+    file = null,
+    videoUrl = null,
+    fileName = null,
+    fileSize = null,
+    status = 'completed',
+    videoModal,
+    previewVideo
+}) {
     // OUTエリア
     const outputArea = document.createElement('div');
     outputArea.className = 'flex items-center gap-2 min-w-0 w-full border-l pl-2';
@@ -122,17 +347,61 @@ export function renderMergedVideoResult(
 
     const outputName = document.createElement('span');
     outputName.className = 'text-sm truncate min-w-0';
-    outputName.textContent = mergedFileName;
-    outputName.title = mergedFileName;
 
     const outputSize = document.createElement('span');
     outputSize.className = 'text-xs text-gray-500 shrink-0';
-    outputSize.textContent = formatFileSize(compressedSize);
+
+    // ファイル情報を設定
+    if (file) {
+        status = file.status;
+
+        fileName = file.compressedName;
+        fileSize = file.compressedSize;
+        videoUrl = file.videoUrl;
+    }
+
+    if (status === 'completed') {
+        outputName.textContent = fileName;
+        outputName.title = fileName;
+        outputSize.textContent = formatFileSize(fileSize);
+
+        // ダウンロードリンク
+        const downloadLink = createDownloadLink(
+            videoUrl,
+            fileName
+        );
+
+        // プレビューボタン
+        const previewButton = createPreviewButton(
+            videoUrl,
+            videoModal,
+            previewVideo
+        );
+
+        outputArea.append(downloadLink, previewButton);
+    } else {
+        const statusText = {
+            pending: '未変換',
+            processing: '圧縮中...',
+            error: '圧縮失敗'
+        };
+
+        outputName.textContent = statusText[status] || '未変換';
+        outputName.classList.add('text-gray-500');
+    }
 
     outputInfo.append(outputName, outputSize);
-    outputArea.append(outputLabel, outputInfo);
+    outputArea.prepend(outputLabel, outputInfo);
 
-    // ダウンロードボタン
+    return outputArea;
+}
+
+// ダウンロードリンク
+function createDownloadLink(videoUrl, fileName) {
+    const downloadLink = document.createElement('a');
+
+    downloadLink.href = videoUrl;
+    downloadLink.download = fileName;
     downloadLink.textContent = '↓';
     downloadLink.title = 'ダウンロード';
     downloadLink.className = `
@@ -145,8 +414,13 @@ export function renderMergedVideoResult(
         text-lg
     `;
 
-    // プレビューボタン
+    return downloadLink;
+}
+
+// プレビューボタン
+function createPreviewButton(videoUrl, videoModal, previewVideo) {
     const previewButton = document.createElement('button');
+
     previewButton.textContent = '▶';
     previewButton.title = 'プレビュー';
     previewButton.className = `
@@ -166,324 +440,55 @@ export function renderMergedVideoResult(
         previewVideo.play();
     });
 
-    // 出力エリアにボタンを配置
-    outputArea.append(downloadLink, previewButton);
-
-    // 空の列（一覧とのグリッド整合用）
-    const emptyArea = document.createElement('div');
-    const emptyArea2 = document.createElement('div');
-    const emptyArea3 = document.createElement('div');
-
-    // 行に配置
-    row.append(
-        emptyArea,  // 対象（40px）
-        inputArea,  // IN（1fr）
-        outputArea, // OUT（1fr）
-        emptyArea2, // 入れ替え（64px）
-        emptyArea3  // 削除（40px）
-    );
-
-    mergedVideoResult.append(separator, row);
+    return previewButton;
 }
 
-// --------------------
-// 一覧描写
-// --------------------
-// 選択動画一覧を描画
-export function renderSelectedFiles(files, elements) {
+/* 削除ボタン */
+function createDeleteButton(onDelete, disabled = false) {
+    const deleteArea = document.createElement('div');
+    deleteArea.className = 'flex items-center justify-center border-l pl-2';
 
-    // DOM要素を取得
-    const {
-        selectedFilesElement,
-        startButton,
-        mergeButton,
-        videoModal,
-        previewVideo
-    } = elements;
+    const deleteButton = document.createElement('button');
+    deleteButton.type = 'button';
+    deleteButton.textContent = '×';
+    deleteButton.disabled = disabled;
+    deleteButton.className = `
+        flex items-center justify-center
+        w-7 h-7
+        rounded
+        text-gray-500
+        hover:bg-red-100
+        hover:text-red-600
+        text-xl
+        leading-none
+        ${disabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'}
+    `;
+    deleteButton.title = '削除';
 
-    // 一覧再描画用
-    const render = () => renderSelectedFiles(files, elements);
+    deleteButton.addEventListener('click', onDelete);
 
-    selectedFilesElement.innerHTML = '';
+    deleteArea.append(deleteButton);
 
-    files.forEach((file, index) => {
-        // 1動画分の行
-        const row = document.createElement('div');
-        row.draggable = true;
-        row.className = `
-            grid
-            grid-cols-[40px_minmax(0,1fr)_minmax(0,1fr)_64px_40px]
-            items-center
-            gap-2
-            border-b
-            px-2
-            py-2
-            min-w-0
-            cursor-grab
-            active:cursor-grabbing
-            hover:bg-blue-50
-        `;
-        row.style.cursor = 'grab';
+    return deleteArea;
+}
 
-        // ドラッグ開始
-        row.addEventListener('dragstart', (event) => {
-            row.style.cursor = 'grabbing';
-            // 移動元のインデックスを保持
-            draggedIndex = index;
+/* サブ関数 */
+// ファイルサイズを読みやすい単位に変換
+function formatFileSize(size) {
+    if (size === null || size === undefined) {
+        return '-';
+    }
 
-            event.dataTransfer.effectAllowed = 'move';
-            event.dataTransfer.setData('text/plain', String(index));
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let value = size;
+    let unitIndex = 0;
 
-            row.classList.add('opacity-40');
-        });
+    while (value >= 1024 && unitIndex < units.length - 1) {
+        value /= 1024;
+        unitIndex++;
+    }
 
-        // ドラッグ中
-        row.addEventListener('dragover', (event) => {
-            event.preventDefault();
-
-            event.dataTransfer.dropEffect = 'move';
-
-            // 移動元自身には挿入位置を表示しない
-            if (draggedIndex === null || draggedIndex === index) {
-                return;
-            }
-
-            const rect = row.getBoundingClientRect();
-            const isAfter = event.clientY >= rect.top + rect.height / 2;
-
-            // 既存の挿入位置表示を解除
-            selectedFilesElement.querySelectorAll('.drag-over-top, .drag-over-bottom')
-                .forEach(element => {
-                    element.classList.remove('drag-over-top', 'drag-over-bottom');
-                });
-
-            // 挿入位置を表示
-            row.classList.add(isAfter ? 'drag-over-bottom' : 'drag-over-top');
-        });
-
-        // ドラッグ終了
-        row.addEventListener('dragend', () => {
-            row.style.cursor = 'grab';
-            draggedIndex = null;
-
-            selectedFilesElement.querySelectorAll('.drag-over-top, .drag-over-bottom')
-                .forEach(element => {
-                    element.classList.remove('drag-over-top', 'drag-over-bottom');
-                });
-
-            row.classList.remove('opacity-40');
-        });
-
-        // ドロップ
-        row.addEventListener('drop', (event) => {
-            event.preventDefault();
-
-            if (draggedIndex === null || draggedIndex === index) {
-                return;
-            }
-
-            const rect = row.getBoundingClientRect();
-            const isAfter = event.clientY >= rect.top + rect.height / 2;
-
-            // 移動元を取り出す
-            const [movedFile] = files.splice(draggedIndex, 1);
-
-            // 移動先の挿入位置を計算
-            let targetIndex = index + (isAfter ? 1 : 0);
-
-            // 移動元を取り除いたことによるインデックス調整
-            if (draggedIndex < targetIndex) {
-                targetIndex--;
-            }
-
-            // 移動先に挿入
-            files.splice(targetIndex, 0, movedFile);
-
-            draggedIndex = null;
-
-            // 一覧を再描画
-            render();
-        });
-
-        // 対象チェックボックス
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.checked = file.included;
-        checkbox.title = '処理対象にする';
-        checkbox.className = 'w-4 h-4 cursor-pointer';
-
-        checkbox.addEventListener('change', () => {
-            file.included = checkbox.checked;
-            render();
-
-            startButton.disabled = !files.some(file => file.included);
-        });
-
-        // チェックボックス配置
-        const checkboxArea = document.createElement('div');
-        checkboxArea.className = 'flex items-center justify-center';
-        checkboxArea.append(checkbox);
-
-        // 入力動画
-        const inputArea = document.createElement('div');
-        inputArea.className = 'flex items-center gap-2 min-w-0 w-full border-l pl-2';
-
-        const inputLabel = document.createElement('span');
-        inputLabel.className = 'text-xs font-semibold text-blue-600 shrink-0';
-        inputLabel.textContent = 'IN';
-
-        const inputInfo = document.createElement('div');
-        inputInfo.className = 'flex items-center gap-2 min-w-0 flex-1';
-
-        const inputName = document.createElement('span');
-        inputName.className = 'text-sm truncate min-w-0';
-        inputName.textContent = file.originalFile.name;
-        inputName.title = file.originalFile.name;
-
-        const inputSize = document.createElement('span');
-        inputSize.className = 'text-xs text-gray-500 shrink-0';
-        inputSize.textContent = formatFileSize(file.originalFile.size);
-
-        inputInfo.append(inputName, inputSize);
-        inputArea.append(inputLabel, inputInfo);
-
-        // 出力動画
-        const outputArea = document.createElement('div');
-        outputArea.className = 'flex items-center gap-2 min-w-0 w-full border-l pl-2';
-
-        const outputLabel = document.createElement('span');
-        outputLabel.className = 'text-xs font-semibold text-green-600 shrink-0';
-        outputLabel.textContent = 'OUT';
-
-        const outputInfo = document.createElement('div');
-        outputInfo.className = 'flex items-center gap-2 min-w-0 flex-1';
-
-        const outputName = document.createElement('span');
-        outputName.className = 'text-sm truncate min-w-0';
-
-        const outputSize = document.createElement('span');
-        outputSize.className = 'text-xs text-gray-500 shrink-0';
-
-        if (file.status === 'completed') {
-            outputName.textContent = file.compressedName;
-            outputName.title = file.compressedName;
-            outputSize.textContent = formatFileSize(file.compressedSize);
-        } else {
-            const statusText = {
-                pending: '未変換',
-                processing: '圧縮中...',
-                error: '圧縮失敗'
-            };
-
-            outputName.textContent = statusText[file.status] || '未変換';
-            outputName.classList.add('text-gray-500');
-        }
-
-        outputInfo.append(outputName, outputSize);
-        outputArea.append(outputLabel, outputInfo);
-
-        // 出力操作
-        if (file.status === 'completed') {
-            const downloadLink = document.createElement('a');
-            downloadLink.href = file.videoUrl;
-            downloadLink.download = file.compressedName;
-            downloadLink.textContent = '↓';
-            downloadLink.title = 'ダウンロード';
-            downloadLink.className = `
-                flex items-center justify-center
-                w-7 h-7
-                rounded
-                text-gray-600
-                hover:bg-blue-100
-                hover:text-blue-600
-                text-lg
-            `;
-
-            const previewButton = document.createElement('button');
-            previewButton.textContent = '▶';
-            previewButton.title = 'プレビュー';
-            previewButton.className = `
-                flex items-center justify-center
-                w-7 h-7
-                rounded
-                text-gray-600
-                hover:bg-blue-100
-                hover:text-blue-600
-                text-sm
-            `;
-
-            previewButton.addEventListener('click', () => {
-                previewVideo.src = file.videoUrl;
-                videoModal.classList.remove('hidden');
-                videoModal.classList.add('flex');
-                previewVideo.play();
-            });
-
-            outputArea.append(downloadLink, previewButton);
-        }
-
-        // ドラッグ用の表示
-        const moveControls = document.createElement('div');
-        moveControls.className = 'flex items-center justify-center gap-1 pl-2';
-
-        const dragHandle = document.createElement('span');
-        dragHandle.textContent = '⠿';
-        dragHandle.title = 'ドラッグして順序を変更';
-        dragHandle.className = `
-            text-xl
-            text-gray-400
-            cursor-grab
-            select-none
-            transition-colors
-            group-hover:text-blue-600
-        `;
-
-        moveControls.append(dragHandle);
-
-        // 削除ボタン
-        const deleteArea = document.createElement('div');
-        deleteArea.className = 'flex items-center justify-center border-l pl-2';
-
-        const deleteButton = document.createElement('button');
-        deleteButton.type = 'button';
-        deleteButton.textContent = '×';
-        deleteButton.className = `
-            flex items-center justify-center
-            w-7 h-7
-            rounded
-            text-gray-500
-            hover:bg-red-100
-            hover:text-red-600
-            text-xl
-            leading-none
-        `;
-        deleteButton.title = '削除';
-        deleteButton.addEventListener('click', () => {
-            if (file.videoUrl) {
-                URL.revokeObjectURL(file.videoUrl);
-            }
-
-            files.splice(index, 1);
-            render();
-            startButton.disabled = !files.some(file => file.included);
-        });
-
-        deleteArea.append(deleteButton);
-
-        row.append(
-            checkboxArea,
-            inputArea,
-            outputArea,
-            moveControls,
-            deleteArea
-        );
-        selectedFilesElement.append(row);
-    });
-
-    // チェック済みの圧縮済み動画が2件以上なら結合可能
-    mergeButton.disabled = files.filter(file =>
-        file.included && file.status === 'completed'
-    ).length < 2;
+    return `${value.toFixed(2)} ${units[unitIndex]}`;
 }
 
 // --------------------
@@ -491,104 +496,50 @@ export function renderSelectedFiles(files, elements) {
 // --------------------
 export function initializeDropArea({
     dropArea,
-    uploader,
-    dropMessageNormal,
-    dropMessageActive
+    uploader
 }) {
-    let isDropHovered = false;
-    let isDraggingFile = false;
-
-    // ドロップエリアの表示を更新
-    function updateDropAreaStyle() {
-        // ドラッグ中
-        if (isDraggingFile) {
-            dropArea.classList.add(
-                'border-blue-500',
-                'bg-blue-100',
-                'ring-4',
-                'ring-blue-200',
-                'shadow-md'
-            );
-
-            dropArea.classList.remove('border-gray-300', 'bg-blue-50');
-
-            dropMessageNormal.classList.add('hidden');
-            dropMessageActive.classList.remove('hidden');
-
-            return;
-        }
-
-        // 通常ホバー
-        if (isDropHovered) {
-            // CSSのhover指定に任せる
-            dropArea.classList.remove(
-                'border-blue-400',
-                'border-gray-300',
-                'bg-blue-50',
-                'bg-blue-100',
-                'ring-4',
-                'ring-blue-200',
-                'shadow-md'
-            );
-        } else {
-            // 通常状態
-            dropArea.classList.remove(
-                'border-blue-400',
-                'border-blue-500',
-                'bg-blue-50',
-                'bg-blue-100',
-                'ring-4',
-                'ring-blue-200',
-                'shadow-md'
-            );
-
-            dropArea.classList.add(
-                'border-gray-300'
-            );
-        }
-
-        dropMessageNormal.classList.remove('hidden');
-        dropMessageActive.classList.add('hidden');
-    }
-
-    // マウスホバー
-    dropArea.addEventListener('mouseenter', () => {
-        isDropHovered = true;
-        updateDropAreaStyle();
-    });
-
-    dropArea.addEventListener('mouseleave', () => {
-        isDropHovered = false;
-        updateDropAreaStyle();
-    });
-
     // ファイルのドラッグ
     dropArea.addEventListener('dragenter', (e) => {
         e.preventDefault();
-        isDraggingFile = true;
-        updateDropAreaStyle();
+
+        dropArea.classList.add(
+            'border-blue-500',
+            'bg-blue-100',
+            'ring-4',
+            'ring-blue-200',
+            'shadow-md'
+        );
     });
 
     dropArea.addEventListener('dragover', (e) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'copy';
-        isDraggingFile = true;
-        updateDropAreaStyle();
     });
 
+    // ドラッグ終了
     dropArea.addEventListener('dragleave', (e) => {
         if (dropArea.contains(e.relatedTarget)) return;
 
-        isDraggingFile = false;
-        updateDropAreaStyle();
+        dropArea.classList.remove(
+            'border-blue-500',
+            'bg-blue-100',
+            'ring-4',
+            'ring-blue-200',
+            'shadow-md'
+        );
     });
 
     // ファイルのドロップ
     dropArea.addEventListener('drop', (e) => {
         e.preventDefault();
 
-        isDraggingFile = false;
-        updateDropAreaStyle();
+        dropArea.classList.remove(
+            'border-blue-500',
+            'bg-blue-100',
+            'ring-4',
+            'ring-blue-200',
+            'shadow-md'
+        );
 
         const files = Array.from(e.dataTransfer.files)
             .filter(file => file.type.startsWith('video/'));
@@ -609,6 +560,22 @@ export function initializeDropArea({
     dropArea.addEventListener('click', () => {
         uploader.click();
     });
+}
+
+// --------------------
+// プログレスバー
+// --------------------
+// 進捗バー更新
+export function updateProgressBar(
+    percent,
+    progressBar,
+    progressPercent
+) {
+    // 0～100の範囲に制限
+    percent = Math.min(100, Math.max(0, percent));
+
+    progressBar.style.width = `${percent}%`;
+    progressPercent.textContent = `${Math.floor(percent)}%`;
 }
 
 // --------------------

@@ -2,17 +2,6 @@
   <x-slot name="additionalHead">
     <!-- FFmpeg -->
     <script src="{{ asset('assets/js/tool/ffmpeg/0.11.6/ffmpeg.min.js') }}"></script>
-
-    <style>
-      /* ドラッグ時の挿入位置 */
-      .drag-over-top {
-        border-top: 3px solid #3b82f6 !important;
-      }
-
-      .drag-over-bottom {
-        border-bottom: 3px solid #3b82f6 !important;
-      }
-    </style>
   </x-slot>
 
   <x-slot name="header">
@@ -154,6 +143,7 @@
               text-center cursor-pointer
               transition-all duration-200
               hover:border-blue-400 hover:bg-blue-50 hover:shadow-md">
+
             <input
               type="file"
               id="uploader"
@@ -161,8 +151,7 @@
               multiple
               class="hidden">
 
-            <!-- 通常時 -->
-            <div id="dropMessageNormal" class="pointer-events-none">
+            <div class="pointer-events-none">
               <div class="text-gray-500 text-sm">
                 動画をドラッグ＆ドロップ
               </div>
@@ -170,21 +159,11 @@
                 またはクリックしてファイルを選択
               </div>
             </div>
-
-            <!-- ドラッグ中 -->
-            <div id="dropMessageActive" class="hidden pointer-events-none">
-              <div class="text-blue-700 font-semibold text-sm">
-                ここに動画をドロップしてください
-              </div>
-              <div class="text-blue-600 text-xs mt-1">
-                ファイルを離すと追加されます
-              </div>
-            </div>
           </div>
 
           <!-- 動画一覧の見出し -->
           <div class="grid grid-cols-[40px_minmax(0,1fr)_minmax(0,1fr)_64px_40px]
-                      items-center gap-2 border-b bg-gray-50 px-2 py-2
+                      items-center gap-2 border-b bg-gray-50 px-2 py-2 mt-2
                       text-xs font-semibold text-gray-600">
 
             <div class="text-center">対象</div>
@@ -196,6 +175,7 @@
           <!-- 動画一覧 -->
           <div id="selectedFiles"></div>
 
+          <div id="separator" class="border-t-2 border-gray-400 mt-4 pt-4" hidden></div>
           <!-- 結合結果 -->
           <div id="mergedVideoResult"></div>
 

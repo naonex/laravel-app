@@ -7,35 +7,33 @@ import {
 import {
     updateProgressBar,
     renderMergedVideoResult,
-    renderSelectedFiles as renderFileList,
+    renderSelectedFiles,
     initializeDropArea,
     initializeVideoModal
 } from './layout.js';
 
-
-// CRFの表示値を更新
+// 圧縮設定
 const crfInput = document.getElementById('crf');
 const crfValue = document.getElementById('crfValue');
 const presetInput = document.getElementById('preset');
-// ボタン要素
+// ボタン
 const startButton = document.getElementById('startCompression');
 const mergeButton = document.getElementById('mergeVideos');
 const cancelButton = document.getElementById('cancelCompression');
-// 進捗表示要素
+// 進捗表示
 const progress = document.getElementById('progress');
 const progressBar = document.getElementById('progressBar');
 const progressPercent = document.getElementById('progressPercent');
 
-// ファイル選択・一覧要素
-const uploader = document.getElementById('uploader');
-const selectedFilesElement = document.getElementById('selectedFiles');
-const mergedVideoResult = document.getElementById('mergedVideoResult');
-// ドラッグ＆ドロップ領域
+// ファイル選択
 const dropArea = document.getElementById('dropArea');
-const dropMessageNormal = document.getElementById('dropMessageNormal');
-const dropMessageActive = document.getElementById('dropMessageActive');
+const uploader = document.getElementById('uploader');
+// 動画一覧
+const selectedFilesElement = document.getElementById('selectedFiles');
+const separator = document.getElementById('separator');
+const mergedVideoResult = document.getElementById('mergedVideoResult');
 
-// モーダル要素
+// モーダル
 const videoModal = document.getElementById("videoModal");
 const previewVideo = document.getElementById("previewVideo");
 const closeVideoModal = document.getElementById("closeVideoModal");
@@ -43,8 +41,7 @@ const closeVideoModal = document.getElementById("closeVideoModal");
 // 一覧描画で使用するDOM要素
 const fileListElements = {
     selectedFilesElement,
-    startButton,
-    mergeButton,
+    mergedVideoResult,
     videoModal,
     previewVideo
 };
@@ -52,16 +49,18 @@ const fileListElements = {
 // 選択された動画ファイル
 let selectedFiles = [];
 
+// 処理状態
+let isTranscoding = false;
+let isMerging = false;
+
 
 // --------------------
-// イベント
+// 初期化
 // --------------------
 // ドロップエリア初期化
 initializeDropArea({
     dropArea,
-    uploader,
-    dropMessageNormal,
-    dropMessageActive
+    uploader
 });
 
 // 動画プレビューモーダル初期化
@@ -71,119 +70,13 @@ initializeVideoModal({
     previewVideo
 });
 
-// CRF値表示更新
+// --------------------
+// イベント
+// --------------------
+// CRFレンジの設定値表示更新
 crfInput.addEventListener('input', () => {
     crfValue.textContent = crfInput.value;
 });
-
-
-// --------------------
-// ボタン操作
-// --------------------
-// 動画圧縮処理
-const transcode = async () => {
-    // 圧縮対象の動画を取得
-    const files = selectedFiles.filter(file => file.included);
-
-    // 対象がなければ終了
-    if (files.length === 0) {
-        progress.textContent = '圧縮対象の動画がありません';
-        return;
-    }
-
-    // CRF値取得
-    const crf = crfInput.value;
-
-    // Preset
-    const preset = presetInput.value;
-
-    await transcodeVideos(files, {
-        crf,
-        preset,
-
-        // 進捗更新
-        onProgress: ({ percent, message }) => {
-            if (percent !== undefined) {
-                updateProgressBar(
-                    percent,
-                    progressBar,
-                    progressPercent
-                );
-            }
-
-            if (message) {
-                progress.textContent = message;
-            }
-        },
-
-        // 一覧更新
-        onFileUpdate: () => {
-            renderSelectedFiles();
-        }
-    });
-};
-startButton.addEventListener('click', transcode);
-
-// 動画結合処理
-const mergeVideos = async () => {
-    // 結合対象の動画を取得
-    const files = selectedFiles.filter(file =>
-        file.included && file.status === 'completed'
-    );
-
-    // 2件以上必要
-    if (files.length < 2) {
-        progress.textContent = '結合対象の圧縮済み動画を2件以上選択してください';
-        return;
-    }
-
-    try {
-        // 動画結合を実行
-        const result = await executeMergeVideos(files, {
-            // 進捗更新
-            onProgress: ({ percent, message }) => {
-                if (percent !== undefined) {
-                    updateProgressBar(
-                        percent,
-                        progressBar,
-                        progressPercent
-                    );
-                }
-
-                if (message) {
-                    progress.textContent = message;
-                }
-            }
-        });
-
-        renderMergedVideoResult(
-            files,
-            result,
-            {
-                mergedVideoResult,
-                videoModal,
-                previewVideo
-            }
-        );
-
-        updateProgressBar(
-            100,
-            progressBar,
-            progressPercent
-        );
-
-        progress.textContent = 'すべての動画を結合しました';
-
-    } catch (error) {
-        console.error(error);
-
-        progress.textContent = '動画の結合に失敗しました';
-    }
-};
-mergeButton.addEventListener('click', mergeVideos);
-
-// キャンセル処理
-cancelButton.addEventListener('click', cancelTranscode);
 
 // 動画ファイル追加
 uploader.addEventListener('change', (event) => {
@@ -205,19 +98,183 @@ uploader.addEventListener('change', (event) => {
             videoUrl: null,
             compressedSize: null,
             status: 'pending',
-            included: true
+            included: !(isTranscoding || isMerging),
+            isProcessing: false
         });
     });
 
     // 同じファイルを再度選択できるようにリセット
     uploader.value = '';
 
-    renderSelectedFiles();
-
-    startButton.disabled = !selectedFiles.some(file => file.included);
+    renderSelectedFiles(selectedFiles, fileListElements, updateActionButtons, isTranscoding || isMerging);
+    updateActionButtons();
 });
 
-// 選択動画一覧を描画
-const renderSelectedFiles = () => {
-    renderFileList(selectedFiles, fileListElements);
+// 動画圧縮ボタン
+const transcode = async () => {
+    // 処理中なら終了
+    if (isTranscoding || isMerging) return;
+
+    // 圧縮対象の動画を取得
+    const files = selectedFiles.filter(file => file.included);
+    // 対象がなければ終了
+    if (files.length === 0) {
+        progress.textContent = '圧縮対象の動画がありません';
+        return;
+    }
+
+    // 圧縮設定値取得
+    const crf = crfInput.value;
+    const preset = presetInput.value;
+
+    // 処理開始
+    isTranscoding = true;
+    updateActionButtons();
+    try {
+        // 処理対象を処理中にする
+        files.forEach(file => {
+            file.isProcessing = true;
+        });
+        renderSelectedFiles(selectedFiles, fileListElements, updateActionButtons, isTranscoding || isMerging);
+
+        await transcodeVideos(files, {
+            crf,
+            preset,
+            // 進捗更新
+            onProgress: ({ percent, message }) => {
+                if (percent !== undefined) {
+                    updateProgressBar(
+                        percent,
+                        progressBar,
+                        progressPercent
+                    );
+                }
+                if (message) {
+                    progress.textContent = message;
+                }
+            },
+            // 一覧更新
+            onFileUpdate: () => {
+                renderSelectedFiles(selectedFiles, fileListElements, updateActionButtons, isTranscoding || isMerging);
+                updateActionButtons();
+            }
+        });
+
+        updateProgressBar(
+            100,
+            progressBar,
+            progressPercent
+        );
+        progress.textContent = '対象の圧縮が完了しました';
+
+    } catch (error) {
+        console.error(error);
+        progress.textContent = '動画の圧縮に失敗しました';
+
+    } finally {
+        // 処理終了
+        isTranscoding = false;
+        updateActionButtons();
+
+        // 処理中フラグを解除
+        files.forEach(file => {
+            file.isProcessing = false;
+        });
+        renderSelectedFiles(selectedFiles, fileListElements, updateActionButtons, isTranscoding || isMerging);
+    }
 };
+startButton.addEventListener('click', transcode);
+
+// 動画結合ボタン
+const mergeVideos = async () => {
+    // 処理中なら終了
+    if (isTranscoding || isMerging) return;
+
+    // 結合対象の動画を取得
+    const files = selectedFiles.filter(file =>
+        file.included && file.status === 'completed'
+    );
+    // 2件以上必要
+    if (files.length < 2) {
+        progress.textContent = '結合対象の圧縮済み動画を2件以上選択してください';
+        return;
+    }
+
+    // 処理開始
+    isMerging = true;
+    updateActionButtons();
+    try {
+        // 処理対象を処理中にする
+        files.forEach(file => {
+            file.isProcessing = true;
+        });
+        renderSelectedFiles(selectedFiles, fileListElements, updateActionButtons, isTranscoding || isMerging);
+
+        // 動画結合を実行
+        await executeMergeVideos(files, {
+            // 進捗更新
+            onProgress: ({ percent, message }) => {
+                if (percent !== undefined) {
+                    updateProgressBar(
+                        percent,
+                        progressBar,
+                        progressPercent
+                    );
+                }
+                if (message) {
+                    progress.textContent = message;
+                }
+            },
+            // 結果更新
+            onResultUpdate: (result) => {
+                separator.hidden = false;
+                renderMergedVideoResult(files, fileListElements, result);
+            }
+        });
+
+        updateProgressBar(
+            100,
+            progressBar,
+            progressPercent
+        );
+        progress.textContent = '対象の動画を結合しました';
+
+    } catch (error) {
+        console.error(error);
+        progress.textContent = '動画の結合に失敗しました';
+
+    } finally {
+        // 処理終了
+        isMerging = false;
+        updateActionButtons();
+
+        // 処理中フラグを解除
+        files.forEach(file => {
+            file.isProcessing = false;
+        });
+        renderSelectedFiles(selectedFiles, fileListElements, updateActionButtons, isTranscoding || isMerging);
+    }
+};
+mergeButton.addEventListener('click', mergeVideos);
+
+// キャンセルボタン
+cancelButton.addEventListener('click', cancelTranscode);
+
+// 操作ボタン状態更新
+function updateActionButtons() {
+    const isProcessing = isTranscoding || isMerging;
+
+    // 圧縮設定
+    crfInput.disabled = isProcessing;
+    presetInput.disabled = isProcessing;
+
+    // 圧縮ボタン
+    startButton.disabled = isProcessing ||
+        !selectedFiles.some(file => file.included);
+
+    // 結合ボタン
+    mergeButton.disabled = isProcessing ||
+        selectedFiles.filter(file =>
+            file.included && file.status === 'completed'
+        ).length < 2;
+}
